@@ -1,0 +1,159 @@
+/* 
+ * Question Paper Extractor - Modern UI Stylesheet
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Merriweather:ital,wght@0,300;0,400;0,700;1,300&display=swap');
+
+:root {
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+  --primary-light: #eef2ff;
+  --secondary: #0ea5e9;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --bg-main: #f8fafc;
+  --card-bg: #ffffff;
+  --border-color: #e2e8f0;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-main);
+  color: #1e293b;
+  min-height: 100vh;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Glassmorphism */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.dark-glass {
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(51, 65, 85, 0.8);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.4); }
+  50% { box-shadow: 0 0 0 10px rgba(79, 70, 229, 0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-glow {
+  animation: pulseGlow 2s infinite;
+}
+
+/* Drag and Drop Zone */
+.dropzone {
+  border: 2px dashed #cbd5e1;
+  transition: all 0.2s ease-in-out;
+}
+.dropzone.dragover {
+  border-color: #4f46e5;
+  background-color: #eef2ff;
+  transform: scale(1.01);
+}
+
+/* Question Type Badges */
+.badge-mcq { background-color: #e0e7ff; color: #4338ca; border: 1px solid #c7d2fe; }
+.badge-true_false { background-color: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+.badge-fill_blank { background-color: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+.badge-short_answer { background-color: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+.badge-long_answer { background-color: #faf5ff; color: #6b21a8; border: 1px solid #e9d5ff; }
+.badge-numerical { background-color: #fff1f2; color: #9f1239; border: 1px solid #fecdd3; }
+.badge-match { background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+
+/* Code and Math styling */
+.math-rendered {
+  font-family: 'KaTeX_Main', 'Merriweather', serif;
+}
+
+code, pre {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* Quiz Option Hover & Selection */
+.quiz-option {
+  transition: all 0.15s ease;
+}
+.quiz-option:hover {
+  background-color: #f8fafc;
+  border-color: #94a3b8;
+}
+.quiz-option.selected {
+  background-color: #eef2ff;
+  border-color: #4f46e5;
+  color: #312e81;
+}
+
+/* Print Styles for Clean Physical Paper or PDF Printing */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 11pt !important;
+  }
+
+  .no-print,
+  header,
+  nav,
+  .action-buttons,
+  #controls-bar,
+  #sidebar,
+  .tab-headers {
+    display: none !important;
+  }
+
+  #extracted-content-area,
+  .print-container {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .question-card {
+    border: none !important;
+    box-shadow: none !important;
+    margin-bottom: 1rem !important;
+    page-break-inside: avoid;
+  }
+
+  .print-header {
+    display: block !important;
+    text-align: center;
+    border-bottom: 2px solid #000;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+  }
+}

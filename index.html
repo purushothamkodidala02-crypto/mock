@@ -1,0 +1,1618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Question Paper Extractor & Studio | Zero-API Client-Side</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: { 50: '#eef2ff', 100: '#e0e7ff', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- KaTeX for Math Equation Rendering -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+
+  <!-- PDF.js for Client-Side PDF Extraction -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+  <!-- Tesseract.js for In-Browser OCR -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+  <!-- Mammoth.js for Word (.docx) Extraction -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col">
+
+  <!-- TOP NAVIGATION BAR -->
+  <header class="bg-white/95 backdrop-blur-md sticky top-0 z-40 border-b border-slate-200 shadow-sm no-print">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      
+      <!-- Brand Logo -->
+      <div class="flex items-center space-x-3 cursor-pointer" onclick="app.resetWorkspace()">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-sky-400 flex items-center justify-center text-white shadow-md shadow-indigo-200">
+          <i data-lucide="file-question" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="text-lg font-bold bg-gradient-to-r from-indigo-900 via-indigo-700 to-indigo-600 bg-clip-text text-transparent">
+              PaperExtract Studio
+            </h1>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span>
+              Zero-API / 100% Client-Side
+            </span>
+          </div>
+          <p class="text-xs text-slate-500 font-medium hidden sm:block">Automated Question Paper Parser, Editor & Quiz Generator</p>
+        </div>
+      </div>
+
+      <!-- Quick Action Buttons -->
+      <div class="flex items-center space-x-2 sm:space-x-3">
+        <!-- Sample Papers Dropdown -->
+        <div class="relative inline-block text-left" id="sample-dropdown-container">
+          <button id="btn-samples" type="button" class="inline-flex items-center justify-center px-3 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">
+            <i data-lucide="sparkles" class="w-4 h-4 mr-1.5 text-amber-500"></i>
+            <span>Sample Papers</span>
+            <i data-lucide="chevron-down" class="w-4 h-4 ml-1 text-slate-400"></i>
+          </button>
+          
+          <div id="sample-menu" class="hidden absolute right-0 mt-2 w-64 rounded-xl bg-white shadow-xl ring-1 ring-black ring-opacity-5 z-50 divide-y divide-slate-100 animate-fade-in">
+            <div class="p-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">Load Instant Sample</div>
+            <div class="p-1 space-y-1">
+              <button onclick="app.loadSample('ts_police')" class="w-full text-left px-3 py-2 text-sm rounded-lg bg-indigo-50/50 hover:bg-indigo-100/70 hover:text-indigo-800 flex items-center space-x-2 border border-indigo-100">
+                <span class="text-lg">👮</span>
+                <div>
+                  <div class="font-bold text-indigo-950">Telangana Police Constable 2015</div>
+                  <div class="text-xs text-indigo-700">200 Marks | Official Key & MCQs</div>
+                </div>
+              </button>
+              <button onclick="app.loadSample('math')" class="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-indigo-50 hover:text-indigo-700 flex items-center space-x-2">
+                <span class="text-lg">📐</span>
+                <div>
+                  <div class="font-medium text-slate-800">Class 10 Mathematics</div>
+                  <div class="text-xs text-slate-500">80 Marks | Equations & MCQs</div>
+                </div>
+              </button>
+              <button onclick="app.loadSample('physics')" class="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-indigo-50 hover:text-indigo-700 flex items-center space-x-2">
+                <span class="text-lg">⚡</span>
+                <div>
+                  <div class="font-medium text-slate-800">Class 12 Physics</div>
+                  <div class="text-xs text-slate-500">70 Marks | Formulas & Sections</div>
+                </div>
+              </button>
+              <button onclick="app.loadSample('cs')" class="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-indigo-50 hover:text-indigo-700 flex items-center space-x-2">
+                <span class="text-lg">🐍</span>
+                <div>
+                  <div class="font-medium text-slate-800">Computer Science / Python</div>
+                  <div class="text-xs text-slate-500">70 Marks | Code & Theory</div>
+                </div>
+              </button>
+              <button onclick="app.loadSample('gk')" class="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-indigo-50 hover:text-indigo-700 flex items-center space-x-2">
+                <span class="text-lg">🌍</span>
+                <div>
+                  <div class="font-medium text-slate-800">General Knowledge & Quiz</div>
+                  <div class="text-xs text-slate-500">10 Marks | Fast MCQs</div>
+                </div>
+              </button>
+              <button onclick="app.loadSample('cbt_response')" class="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-indigo-50 hover:text-indigo-700 flex items-center space-x-2">
+                <span class="text-lg">💻</span>
+                <div>
+                  <div class="font-medium text-slate-800">Online CBT Response Sheet</div>
+                  <div class="text-xs text-slate-500">150 Marks | Q148, Q149, Q150</div>
+                </div>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Run Automated Tests Link -->
+        <a href="test.html" class="inline-flex items-center justify-center px-3 py-2 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors" title="Run Automated Verification Tests">
+          <i data-lucide="check-circle" class="w-4 h-4 mr-1 text-emerald-600"></i>
+          <span>Run Tests</span>
+        </a>
+
+        <!-- Model Selector Dropdown in Nav -->
+        <div class="hidden sm:flex items-center space-x-1.5 bg-slate-100 hover:bg-slate-200/70 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs transition-colors">
+          <i data-lucide="cpu" class="w-3.5 h-3.5 text-indigo-600"></i>
+          <select id="nav-model-select" onchange="app.onModelSelectChange(this.value)" class="bg-transparent font-semibold text-slate-700 focus:outline-none cursor-pointer">
+            <option value="gemini-3.6-flash" selected>Gemini 3.6 Flash (Recommended)</option>
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+            <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+            <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
+          </select>
+        </div>
+
+        <!-- Multi-API Keys Pool Status Button -->
+        <button onclick="app.openAiKeyModal()" id="nav-key-manager-btn" class="inline-flex items-center justify-center px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors border border-slate-200 shadow-xs" title="Manage Gemini API Keys Pool">
+          <span id="nav-key-status-dot" class="w-2 h-2 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span>
+          <i data-lucide="key" class="w-3.5 h-3.5 mr-1 text-amber-500"></i>
+          <span id="nav-keys-count">0 Keys Pool</span>
+        </button>
+
+        <!-- Paper Vault & Multi-Exam Pattern Studio Button -->
+        <button onclick="app.openVaultModal()" id="nav-vault-btn" class="inline-flex items-center justify-center px-3 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200 shadow-xs" title="Open Paper Vault & Multi-Year Pattern Studio">
+          <i data-lucide="archive" class="w-3.5 h-3.5 mr-1 text-indigo-600"></i>
+          <span id="nav-vault-count">Paper Vault (0)</span>
+        </button>
+
+        <!-- Start Interactive Quiz Button -->
+        <button id="btn-open-quiz" onclick="app.launchQuiz()" class="hidden inline-flex items-center justify-center px-3.5 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition-all">
+          <i data-lucide="play-circle" class="w-4 h-4 mr-1.5"></i>
+          <span>Take Mock Test</span>
+        </button>
+
+        <!-- Export Menu Button -->
+        <button id="btn-open-export" onclick="app.openExportModal()" class="hidden inline-flex items-center justify-center px-3.5 py-2 text-sm font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 rounded-lg shadow-sm transition-all">
+          <i data-lucide="download" class="w-4 h-4 mr-1.5 text-indigo-600"></i>
+          <span>Export</span>
+        </button>
+
+        <!-- Print Paper -->
+        <button id="btn-print" onclick="window.print()" class="hidden inline-flex items-center justify-center p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors" title="Print Paper">
+          <i data-lucide="printer" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
+
+    <!-- UPLOAD & INGESTION SECTION (Visible when no document is active or during new upload) -->
+    <div id="upload-section" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8 transition-all animate-fade-in">
+      
+      <!-- Hero Headline -->
+      <div class="text-center max-w-3xl mx-auto mb-8">
+        <div class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100 mb-3">
+          <i data-lucide="cpu" class="w-3.5 h-3.5 mr-1.5"></i>
+          In-Browser NLP Parser + Tesseract OCR + PDF Engine
+        </div>
+        <h2 class="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+          Extract Any Question Paper <span class="bg-gradient-to-r from-indigo-600 to-sky-500 bg-clip-text text-transparent">Instantly</span>
+        </h2>
+        <p class="mt-3 text-base text-slate-600">
+          Upload PDF exams, scanned photos, Word documents, or raw text. Automatically separates sections, questions, MCQ options, marks, and formulas without sending data to any external server.
+        </p>
+      </div>
+
+      <!-- Extraction Engine Mode Switcher -->
+      <div class="max-w-2xl mx-auto mb-6 p-3 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div class="flex items-center space-x-2">
+          <span class="text-xs font-bold text-slate-700 uppercase tracking-wider">Engine:</span>
+          <div class="inline-flex p-1 bg-white rounded-xl border border-slate-200 text-xs font-semibold shadow-sm">
+            <button id="engine-btn-local" onclick="app.setExtractionEngine('local')" class="px-3 py-1.5 rounded-lg bg-indigo-600 text-white transition-all flex items-center">
+              <i data-lucide="zap" class="w-3.5 h-3.5 mr-1"></i> Local Free (Zero-API)
+            </button>
+            <button id="engine-btn-gemini" onclick="app.setExtractionEngine('gemini')" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition-all flex items-center">
+              <i data-lucide="sparkles" class="w-3.5 h-3.5 mr-1 text-amber-500"></i> Gemini AI Direct PDF
+            </button>
+          </div>
+        </div>
+
+        <button onclick="app.openAiKeyModal()" class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold underline flex items-center">
+          <i data-lucide="settings" class="w-3.5 h-3.5 mr-1"></i> API Key Settings
+        </button>
+      </div>
+
+      <!-- Ingestion Mode Tabs -->
+      <div class="flex justify-center mb-6">
+        <div class="inline-flex p-1 bg-slate-100 rounded-xl space-x-1 border border-slate-200">
+          <button type="button" id="tab-btn-file" onclick="app.setUploadTab('file')" class="px-4 py-2 text-sm font-semibold rounded-lg bg-white text-indigo-600 shadow-sm transition-all">
+            <i data-lucide="file-up" class="w-4 h-4 inline mr-1.5"></i> Upload Document (PDF / Image / DOCX)
+          </button>
+          <button type="button" id="tab-btn-text" onclick="app.setUploadTab('text')" class="px-4 py-2 text-sm font-semibold rounded-lg text-slate-600 hover:text-slate-900 transition-all">
+            <i data-lucide="align-left" class="w-4 h-4 inline mr-1.5"></i> Paste Raw Text
+          </button>
+        </div>
+      </div>
+
+      <!-- TAB 1: FILE DROPZONE -->
+      <div id="tab-content-file" class="space-y-4">
+
+        <!-- PDF File Preview Card (Displayed when a file is chosen) -->
+        <div id="file-selected-card" class="hidden p-5 rounded-2xl bg-indigo-50/70 border border-indigo-200 animate-fade-in space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+              <div class="w-11 h-11 rounded-xl bg-red-100 text-red-600 flex items-center justify-center font-bold shadow-xs">
+                <i data-lucide="file-text" class="w-6 h-6"></i>
+              </div>
+              <div>
+                <div id="file-preview-name" class="font-bold text-slate-900 text-sm">sample.pdf</div>
+                <div class="text-xs text-slate-500 flex items-center gap-2 mt-0.5">
+                  <span id="file-preview-size">0 KB</span>
+                  <span>•</span>
+                  <span id="file-preview-pages" class="text-indigo-700 font-semibold">Detecting pages...</span>
+                  <span>•</span>
+                  <span id="file-preview-key-status" class="text-emerald-700 font-medium">Ready</span>
+                </div>
+              </div>
+            </div>
+            <button onclick="app.clearSelectedFile()" class="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-white transition-colors" title="Select different file">
+              <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+          </div>
+
+          <!-- Page Scope & Engine Configuration -->
+          <div class="p-3 bg-white rounded-xl border border-indigo-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+            <div class="flex flex-wrap items-center gap-3">
+              <span class="font-bold text-slate-700">Scope:</span>
+              <label class="flex items-center space-x-1 cursor-pointer">
+                <input type="radio" name="page-scope" value="all" id="scope-all" checked onchange="app.onScopeChange('all')" class="text-indigo-600">
+                <span>All Pages</span>
+              </label>
+              <label class="flex items-center space-x-1 cursor-pointer">
+                <input type="radio" name="page-scope" value="custom" id="scope-custom" onchange="app.onScopeChange('custom')" class="text-indigo-600">
+                <span>Page Range:</span>
+              </label>
+              <input type="text" id="custom-page-range-input" placeholder="e.g. 1-5 or 1,3,7" class="hidden text-xs px-2.5 py-1 rounded-lg border border-slate-300 w-32 font-mono focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <!-- Mode Selector: Auto vs Force Vision -->
+            <div class="flex items-center space-x-2">
+              <span class="font-bold text-slate-700">AI Mode:</span>
+              <select id="select-ai-mode" class="text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                <option value="auto" selected>⚡ Auto-Detect</option>
+                <option value="vision">👁️ Gemini Vision (Telugu/Regional Fonts & Scans)</option>
+              </select>
+            </div>
+
+            <div class="flex items-center space-x-2">
+              <span class="text-slate-500">Model:</span>
+              <span id="file-card-model-badge" class="font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">gemini-2.5-flash</span>
+              <button onclick="app.openAiKeyModal()" class="text-indigo-600 hover:text-indigo-800 underline text-[11px] font-semibold">Change</button>
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="flex flex-col sm:flex-row items-center gap-2.5 pt-1">
+            <button onclick="app.startGeminiExtraction()" id="btn-start-gemini-extract" class="w-full sm:flex-1 py-3 px-5 bg-gradient-to-r from-indigo-600 via-indigo-600 to-sky-600 hover:from-indigo-700 hover:to-sky-700 text-white font-bold text-sm rounded-xl shadow-md shadow-indigo-100 transition-all flex items-center justify-center gap-2">
+              <i data-lucide="sparkles" class="w-4 h-4 text-amber-300"></i>
+              Extract Questions & Options with Gemini AI
+            </button>
+            <button onclick="app.startLocalExtraction()" class="w-full sm:w-auto py-3 px-4 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs rounded-xl border border-slate-300 transition-all flex items-center justify-center gap-1.5 shadow-2xs">
+              <i data-lucide="zap" class="w-3.5 h-3.5 text-amber-500"></i>
+              Local Zero-API Parse
+            </button>
+          </div>
+        </div>
+
+        <div id="dropzone" class="dropzone rounded-2xl p-8 sm:p-12 text-center cursor-pointer bg-slate-50 hover:bg-indigo-50/50 flex flex-col items-center justify-center border-2 border-dashed border-slate-300 transition-all">
+          <input type="file" id="file-input" class="hidden" accept=".pdf, .png, .jpg, .jpeg, .webp, .docx, .txt" multiple>
+          
+          <div class="w-16 h-16 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center mb-4 shadow-sm">
+            <i data-lucide="upload-cloud" class="w-8 h-8"></i>
+          </div>
+
+          <p class="text-base font-bold text-slate-800">
+            Click to upload or drag & drop question paper PDF
+          </p>
+          <p class="text-xs text-slate-500 mt-1 max-w-md">
+            Supports <strong class="text-slate-700">Digital & Scanned PDFs</strong>, <strong class="text-slate-700">Images</strong>, <strong class="text-slate-700">Word (.docx)</strong>. Automatically extracts Questions, MCQ Options (A/B/C/D), Keys, & Equations.
+          </p>
+
+          <div class="flex items-center space-x-4 mt-6 text-xs text-slate-500">
+            <span class="inline-flex items-center font-medium"><i data-lucide="file-text" class="w-3.5 h-3.5 mr-1 text-red-500"></i> PDF Document</span>
+            <span class="inline-flex items-center font-medium"><i data-lucide="image" class="w-3.5 h-3.5 mr-1 text-sky-500"></i> JPG / PNG Scans</span>
+            <span class="inline-flex items-center font-medium"><i data-lucide="file" class="w-3.5 h-3.5 mr-1 text-blue-600"></i> Word (.docx)</span>
+          </div>
+        </div>
+
+        <!-- Optional Extraction Features -->
+        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
+          <label class="flex items-center space-x-2 cursor-pointer select-none">
+            <input type="checkbox" id="toggle-extract-images" onchange="app.onToggleImages(this)" class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300">
+            <span class="font-semibold text-slate-700">Extract Embedded Diagrams & Images (Local Engine)</span>
+            <span class="text-slate-400 font-normal">(Gemini AI always understands visual diagrams directly)</span>
+          </label>
+          <span id="badge-extract-mode" class="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">⚡ Multi-Key Ready</span>
+        </div>
+
+        <!-- Quick 1-Click Sample Chips -->
+        <div class="flex flex-wrap items-center justify-center gap-2 pt-2">
+          <span class="text-xs font-semibold text-slate-400 mr-1">Or test with 1-click sample:</span>
+          <button onclick="app.loadSample('ts_police')" class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-100 hover:bg-indigo-200 text-indigo-800 border border-indigo-200 transition-colors shadow-sm">
+            👮 TS Police Constable 2015 (200M)
+          </button>
+          <button onclick="app.loadSample('math')" class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 border border-slate-200 transition-colors">
+            📐 Class 10 Math (80M)
+          </button>
+          <button onclick="app.loadSample('physics')" class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 border border-slate-200 transition-colors">
+            ⚡ Class 12 Physics (70M)
+          </button>
+          <button onclick="app.loadSample('cs')" class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 border border-slate-200 transition-colors">
+            🐍 Computer Science (70M)
+          </button>
+          <button onclick="app.loadSample('gk')" class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-700 border border-slate-200 transition-colors">
+            🌍 General Knowledge (10M)
+          </button>
+        </div>
+      </div>
+
+      <!-- TAB 2: TEXT PASTE ZONE -->
+      <div id="tab-content-text" class="hidden space-y-4">
+        <textarea id="raw-text-input" rows="12" placeholder="Paste your question paper text here... (including header, sections, questions with 1., Q1, MCQ options A/B/C/D, marks [2 Marks], etc.)" class="w-full p-4 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm font-mono leading-relaxed bg-slate-50 focus:bg-white"></textarea>
+        
+        <div class="flex justify-between items-center">
+          <span class="text-xs text-slate-500">Supports all standard numbering styles (1., Q.1, [1], (a), (i)) and marks syntax.</span>
+          <button type="button" onclick="app.extractFromRawText()" class="inline-flex items-center px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm rounded-xl shadow-md transition-all">
+            <i data-lucide="zap" class="w-4 h-4 mr-2"></i>
+            Extract Questions Now
+          </button>
+        </div>
+      </div>
+
+      <!-- PROCESSING PROGRESS BAR -->
+      <div id="processing-indicator" class="hidden mt-6 bg-indigo-50/90 rounded-xl p-4 border border-indigo-200 animate-fade-in space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2.5">
+            <div class="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+            <span id="processing-status-text" class="text-sm font-semibold text-indigo-950">Processing document...</span>
+            <span id="processing-time-elapsed" class="text-xs font-mono font-medium px-2 py-0.5 rounded-md bg-white border border-indigo-200 text-indigo-700">0:00</span>
+          </div>
+          <div class="flex items-center space-x-2">
+            <button id="btn-force-fast-mode" onclick="app.switchToFastLocalExtraction()" class="hidden px-2.5 py-1 text-xs font-bold text-indigo-700 hover:text-indigo-900 bg-white hover:bg-indigo-100 rounded-lg border border-indigo-300 shadow-sm transition-all flex items-center">
+              <i data-lucide="zap" class="w-3.5 h-3.5 mr-1 text-amber-500"></i> Switch to Instant Local Mode
+            </button>
+            <button onclick="app.cancelExtraction()" class="px-2.5 py-1 text-xs font-semibold text-red-700 hover:text-red-900 bg-white hover:bg-red-50 rounded-lg border border-red-200 shadow-sm transition-all flex items-center">
+              <i data-lucide="x" class="w-3.5 h-3.5 mr-1"></i> Cancel
+            </button>
+            <span id="processing-percent" class="text-xs font-bold text-indigo-800 ml-1">0%</span>
+          </div>
+        </div>
+        
+        <!-- Live Failover & Rotation Alert Banner -->
+        <div id="key-rotation-banner" class="hidden p-2.5 rounded-xl bg-amber-100 border border-amber-300 text-amber-900 text-xs font-semibold flex items-center justify-between animate-fade-in">
+          <div class="flex items-center space-x-2">
+            <i data-lucide="refresh-cw" class="w-4 h-4 animate-spin text-amber-700"></i>
+            <span id="key-rotation-text">Key hit rate limit (429). Auto-switching to next API key...</span>
+          </div>
+          <span class="text-[10px] uppercase font-bold bg-amber-200 px-2 py-0.5 rounded text-amber-800">0 Downtime Failover</span>
+        </div>
+
+        <div class="w-full bg-indigo-200 rounded-full h-2.5 overflow-hidden">
+          <div id="processing-bar" class="bg-indigo-600 h-2.5 rounded-full transition-all duration-200" style="width: 0%"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- MAIN STUDIO WORKSPACE (Visible after Extraction) -->
+    <div id="studio-workspace" class="hidden space-y-6">
+
+      <!-- TOP METRICS & STATS BAR -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center">
+            <i data-lucide="help-circle" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div id="stat-total-questions" class="text-2xl font-extrabold text-slate-900">0</div>
+            <div class="text-xs text-slate-500 font-medium">Total Questions</div>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center">
+            <i data-lucide="award" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="flex items-center space-x-1">
+              <span id="stat-total-marks" class="text-2xl font-extrabold text-slate-900">0</span>
+              <span id="stat-marks-match-badge" class="text-xs font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 ml-1">✓ Match</span>
+            </div>
+            <div class="text-xs text-slate-500 font-medium">Calculated Marks</div>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
+            <i data-lucide="layout-grid" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div id="stat-total-sections" class="text-2xl font-extrabold text-slate-900">0</div>
+            <div class="text-xs text-slate-500 font-medium">Exam Sections</div>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-lg bg-sky-100 text-sky-600 flex items-center justify-center">
+            <i data-lucide="check-square" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div id="stat-mcq-count" class="text-2xl font-extrabold text-slate-900">0</div>
+            <div class="text-xs text-slate-500 font-medium">MCQ / Objectives</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- EXAM HEADER & METADATA CARD -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+        
+        <div class="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
+          <div class="flex items-center space-x-2">
+            <i data-lucide="graduation-cap" class="w-5 h-5 text-indigo-600"></i>
+            <h3 class="font-bold text-slate-900 text-lg">Exam Metadata & Instructions</h3>
+          </div>
+          <button onclick="app.toggleHeaderEdit()" class="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center">
+            <i data-lucide="edit-3" class="w-3.5 h-3.5 mr-1"></i> <span id="btn-edit-header-text">Edit Details</span>
+          </button>
+        </div>
+
+        <!-- Metadata Display Grid -->
+        <div id="metadata-display-view" class="space-y-4">
+          <div class="text-center pb-2">
+            <div id="disp-institution" class="text-sm font-semibold text-slate-500 uppercase tracking-wide"></div>
+            <div id="disp-title" class="text-xl font-bold text-slate-900 mt-0.5"></div>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200 text-sm">
+            <div>
+              <span class="text-xs text-slate-500 block font-medium">Subject</span>
+              <strong id="disp-subject" class="text-slate-800">-</strong>
+            </div>
+            <div>
+              <span class="text-xs text-slate-500 block font-medium">Class / Grade</span>
+              <strong id="disp-grade" class="text-slate-800">-</strong>
+            </div>
+            <div>
+              <span class="text-xs text-slate-500 block font-medium">Time Allowed</span>
+              <strong id="disp-duration" class="text-slate-800">-</strong>
+            </div>
+            <div>
+              <span class="text-xs text-slate-500 block font-medium">Max Marks</span>
+              <strong id="disp-maxmarks" class="text-slate-800">-</strong>
+            </div>
+          </div>
+
+          <!-- Instructions Block -->
+          <div id="disp-instructions-container" class="p-4 rounded-xl bg-indigo-50/50 border border-indigo-100 text-xs text-slate-700">
+            <strong class="font-bold text-indigo-900 block mb-1">General Instructions:</strong>
+            <ul id="disp-instructions-list" class="list-disc list-inside space-y-1"></ul>
+          </div>
+        </div>
+
+        <!-- Editable Metadata Form (Initially Hidden) -->
+        <div id="metadata-edit-view" class="hidden space-y-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="text-xs font-semibold text-slate-600 block mb-1">Exam Title</label>
+              <input type="text" id="edit-meta-title" class="w-full text-sm p-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500">
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-slate-600 block mb-1">Institution / School / Board</label>
+              <input type="text" id="edit-meta-institution" class="w-full text-sm p-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div>
+              <label class="text-xs font-semibold text-slate-600 block mb-1">Subject</label>
+              <input type="text" id="edit-meta-subject" class="w-full text-sm p-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500">
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-slate-600 block mb-1">Class / Grade</label>
+              <input type="text" id="edit-meta-grade" class="w-full text-sm p-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500">
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-slate-600 block mb-1">Duration</label>
+              <input type="text" id="edit-meta-duration" class="w-full text-sm p-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500">
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-slate-600 block mb-1">Max Marks</label>
+              <input type="number" id="edit-meta-maxmarks" class="w-full text-sm p-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500">
+            </div>
+          </div>
+
+          <div>
+            <label class="text-xs font-semibold text-slate-600 block mb-1">Instructions (One per line)</label>
+            <textarea id="edit-meta-instructions" rows="3" class="w-full text-xs font-mono p-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500"></textarea>
+          </div>
+
+          <div class="flex justify-end space-x-2">
+            <button onclick="app.saveMetadataChanges()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700">Save Changes</button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- FILTER & SEARCH BAR -->
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+        
+        <!-- Search Input -->
+        <div class="relative w-full sm:w-72">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
+          <input type="text" id="filter-search" oninput="app.applyFilters()" placeholder="Search questions..." class="w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+        </div>
+
+        <!-- Filter Selects -->
+        <div class="flex items-center space-x-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+          
+          <select id="filter-section" onchange="app.applyFilters()" class="text-xs p-2 rounded-lg border border-slate-300 bg-white font-medium text-slate-700">
+            <option value="all">All Sections</option>
+          </select>
+
+          <select id="filter-type" onchange="app.applyFilters()" class="text-xs p-2 rounded-lg border border-slate-300 bg-white font-medium text-slate-700">
+            <option value="all">All Types</option>
+            <option value="mcq">MCQ (Multiple Choice)</option>
+            <option value="short_answer">Short Answer</option>
+            <option value="long_answer">Long Answer</option>
+            <option value="numerical">Numerical / Math</option>
+            <option value="fill_blank">Fill in Blanks</option>
+            <option value="true_false">True / False</option>
+          </select>
+
+          <button onclick="app.removeAllImages()" id="btn-clear-all-images" class="hidden inline-flex items-center px-3 py-2 rounded-lg text-xs font-semibold bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 shadow-sm whitespace-nowrap" title="Remove all attached diagram images">
+            <i data-lucide="image-off" class="w-3.5 h-3.5 mr-1 text-red-600"></i> Clear Diagrams
+          </button>
+
+          <button onclick="app.openAddQuestionModal()" class="inline-flex items-center px-3 py-2 rounded-lg text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm whitespace-nowrap">
+            <i data-lucide="plus" class="w-4 h-4 mr-1"></i> Add Question
+          </button>
+
+          <button onclick="app.resetWorkspace()" class="inline-flex items-center px-3 py-2 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 whitespace-nowrap">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5 mr-1"></i> New Upload
+          </button>
+
+        </div>
+
+      </div>
+
+      <!-- QUESTIONS CONTAINER (Structured Studio Cards) -->
+      <div id="questions-studio-container" class="space-y-6">
+        <!-- Rendered dynamically by app.js -->
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- INTERACTIVE QUIZ / MOCK TEST MODAL (FULLSCREEN) -->
+  <div id="quiz-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-50 hidden flex flex-col">
+    
+    <!-- Quiz Header -->
+    <div class="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shadow-sm">
+      <div class="flex items-center space-x-4">
+        <div class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
+          <i data-lucide="timer" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h3 id="quiz-header-title" class="font-bold text-slate-900 text-base">Practice Mock Test</h3>
+          <p id="quiz-header-subject" class="text-xs text-slate-500 font-medium">Interactive Exam Mode</p>
+        </div>
+      </div>
+
+      <!-- Timer & Progress -->
+      <div class="flex items-center space-x-6">
+        <div class="text-right">
+          <div class="text-xs text-slate-500 font-semibold uppercase">Time Remaining</div>
+          <div id="quiz-timer-display" class="text-xl font-mono font-bold text-indigo-600">00:00</div>
+        </div>
+
+        <button onclick="app.confirmSubmitQuiz()" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-md transition-all">
+          Submit Test
+        </button>
+
+        <button onclick="app.closeQuizModal()" class="p-2 text-slate-400 hover:text-slate-700 rounded-lg">
+          <i data-lucide="x" class="w-6 h-6"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Quiz Body (Split into Question View and Navigation Sidebar) -->
+    <div class="flex-1 flex flex-col md:flex-row overflow-hidden bg-slate-100 p-4 sm:p-6 gap-6">
+      
+      <!-- Current Question Card -->
+      <div class="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200 flex flex-col overflow-hidden">
+        
+        <!-- Question Header -->
+        <div class="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+          <div class="flex items-center space-x-2">
+            <span id="quiz-q-num-badge" class="px-3 py-1 bg-indigo-600 text-white rounded-lg font-bold text-sm">Q1</span>
+            <span id="quiz-q-marks-badge" class="px-2.5 py-1 bg-slate-200 text-slate-700 rounded-md font-semibold text-xs">1 Mark</span>
+            <span id="quiz-q-type-badge" class="px-2.5 py-1 rounded-md font-semibold text-xs badge-mcq">MCQ</span>
+          </div>
+          <button id="btn-quiz-flag" onclick="app.toggleCurrentFlag()" class="text-xs font-semibold px-3 py-1.5 rounded-lg border border-amber-300 text-amber-700 hover:bg-amber-50 flex items-center">
+            <i data-lucide="flag" class="w-3.5 h-3.5 mr-1"></i> Flag for Review
+          </button>
+        </div>
+
+        <!-- Question Body Area -->
+        <div class="flex-1 p-6 overflow-y-auto space-y-4">
+          <div id="quiz-question-text" class="text-base font-medium text-slate-800 leading-relaxed math-rendered"></div>
+
+          <!-- Question Diagram Container -->
+          <div id="quiz-question-image-container" class="hidden my-3 inline-block max-w-full"></div>
+
+          <!-- MCQ Options / Answer Input Container -->
+          <div id="quiz-answer-container" class="space-y-3"></div>
+        </div>
+
+        <!-- Question Footer Navigation -->
+        <div class="p-4 border-t border-slate-200 flex items-center justify-between bg-slate-50">
+          <button id="btn-quiz-prev" onclick="app.quizGoPrev()" class="px-4 py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold text-xs rounded-xl shadow-sm">
+            <i data-lucide="arrow-left" class="w-4 h-4 inline mr-1"></i> Previous
+          </button>
+          
+          <span id="quiz-progress-text" class="text-xs text-slate-500 font-medium">Question 1 of 10</span>
+
+          <button id="btn-quiz-next" onclick="app.quizGoNext()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-sm">
+            Next <i data-lucide="arrow-right" class="w-4 h-4 inline ml-1"></i>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Right Navigation Palette -->
+      <div class="w-full md:w-80 bg-white rounded-2xl shadow-sm border border-slate-200 p-5 flex flex-col">
+        <h4 class="font-bold text-slate-800 text-sm mb-3 flex items-center">
+          <i data-lucide="grid" class="w-4 h-4 mr-2 text-indigo-600"></i> Question Palette
+        </h4>
+
+        <!-- Legend -->
+        <div class="grid grid-cols-2 gap-2 text-xs mb-4 pb-3 border-b border-slate-100 text-slate-600">
+          <div class="flex items-center"><span class="w-3 h-3 rounded-full bg-emerald-500 mr-1.5"></span> Answered</div>
+          <div class="flex items-center"><span class="w-3 h-3 rounded-full bg-slate-200 mr-1.5"></span> Unanswered</div>
+          <div class="flex items-center"><span class="w-3 h-3 rounded-full bg-amber-500 mr-1.5"></span> Flagged</div>
+          <div class="flex items-center"><span class="w-3 h-3 rounded-full bg-indigo-600 mr-1.5"></span> Current</div>
+        </div>
+
+        <!-- Question Bubbles Grid -->
+        <div id="quiz-bubble-grid" class="flex-1 grid grid-cols-5 gap-2 overflow-y-auto content-start"></div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- QUIZ RESULTS MODAL -->
+  <div id="quiz-result-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 animate-fade-in max-h-[90vh] flex flex-col">
+      
+      <div class="text-center pb-6 border-b border-slate-100">
+        <div class="w-16 h-16 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-3">
+          <i data-lucide="award" class="w-8 h-8"></i>
+        </div>
+        <h3 class="text-2xl font-bold text-slate-900">Test Completed!</h3>
+        <p class="text-xs text-slate-500 mt-1">Here is your performance summary</p>
+      </div>
+
+      <div class="grid grid-cols-3 gap-4 py-6 text-center">
+        <div class="p-3 bg-indigo-50 rounded-xl">
+          <div id="res-score" class="text-2xl font-extrabold text-indigo-700">0 / 0</div>
+          <div class="text-xs text-slate-500 font-medium mt-0.5">Total Score</div>
+        </div>
+        <div class="p-3 bg-emerald-50 rounded-xl">
+          <div id="res-percentage" class="text-2xl font-extrabold text-emerald-700">0%</div>
+          <div class="text-xs text-slate-500 font-medium mt-0.5">Accuracy</div>
+        </div>
+        <div class="p-3 bg-sky-50 rounded-xl">
+          <div id="res-time" class="text-2xl font-extrabold text-sky-700">00:00</div>
+          <div class="text-xs text-slate-500 font-medium mt-0.5">Time Taken</div>
+        </div>
+      </div>
+
+      <!-- Question breakdown summary -->
+      <div id="res-breakdown-list" class="flex-1 overflow-y-auto space-y-3 pr-1 divide-y divide-slate-100"></div>
+
+      <div class="pt-6 border-t border-slate-100 flex justify-end space-x-3">
+        <button onclick="app.closeQuizResults()" class="px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl">Close</button>
+        <button onclick="app.launchQuiz()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl">Retake Test</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EXPORT MODAL -->
+  <div id="export-modal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 animate-fade-in">
+      
+      <div class="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center">
+            <i data-lucide="file-output" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-slate-900 text-lg">Export Question Paper</h3>
+            <p class="text-xs text-slate-500">Choose your preferred output format</p>
+          </div>
+        </div>
+        <button onclick="app.closeExportModal()" class="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        
+        <!-- Export to Printable PDF -->
+        <button onclick="app.exportFile('pdf')" class="p-4 rounded-xl border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/50 text-left transition-all flex items-start space-x-3 group">
+          <div class="p-2 rounded-lg bg-red-100 text-red-600 group-hover:bg-red-600 group-hover:text-white transition-colors">
+            <i data-lucide="printer" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="font-bold text-slate-800 text-sm">Printable Paper / PDF</div>
+            <div class="text-xs text-slate-500 mt-0.5">Clean layout for physical printing or PDF saving</div>
+          </div>
+        </button>
+
+        <!-- Export to Word (.doc) -->
+        <button onclick="app.exportFile('doc')" class="p-4 rounded-xl border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/50 text-left transition-all flex items-start space-x-3 group">
+          <div class="p-2 rounded-lg bg-blue-100 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+            <i data-lucide="file-text" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="font-bold text-slate-800 text-sm">Word Document (.doc)</div>
+            <div class="text-xs text-slate-500 mt-0.5">Editable Microsoft Word formatted test paper</div>
+          </div>
+        </button>
+
+        <!-- Export to Structured JSON -->
+        <button onclick="app.exportFile('json')" class="p-4 rounded-xl border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/50 text-left transition-all flex items-start space-x-3 group">
+          <div class="p-2 rounded-lg bg-emerald-100 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+            <i data-lucide="code" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="font-bold text-slate-800 text-sm">Structured JSON</div>
+            <div class="text-xs text-slate-500 mt-0.5">Complete schema with metadata, questions & options</div>
+          </div>
+        </button>
+
+        <!-- Export to CSV / Excel -->
+        <button onclick="app.exportFile('csv')" class="p-4 rounded-xl border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/50 text-left transition-all flex items-start space-x-3 group">
+          <div class="p-2 rounded-lg bg-amber-100 text-amber-600 group-hover:bg-amber-600 group-hover:text-white transition-colors">
+            <i data-lucide="table" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="font-bold text-slate-800 text-sm">CSV / Spreadsheet</div>
+            <div class="text-xs text-slate-500 mt-0.5">Tabular question bank for Excel or Sheets</div>
+          </div>
+        </button>
+
+        <!-- Export to Markdown -->
+        <button onclick="app.exportFile('markdown')" class="p-4 rounded-xl border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/50 text-left transition-all flex items-start space-x-3 group">
+          <div class="p-2 rounded-lg bg-violet-100 text-violet-600 group-hover:bg-violet-600 group-hover:text-white transition-colors">
+            <i data-lucide="hash" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="font-bold text-slate-800 text-sm">Markdown (.md)</div>
+            <div class="text-xs text-slate-500 mt-0.5">Clean markdown formatted documentation</div>
+          </div>
+        </button>
+
+        <!-- Export to LaTeX (.tex) -->
+        <button onclick="app.exportFile('latex')" class="p-4 rounded-xl border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/50 text-left transition-all flex items-start space-x-3 group">
+          <div class="p-2 rounded-lg bg-slate-100 text-slate-700 group-hover:bg-slate-700 group-hover:text-white transition-colors">
+            <i data-lucide="superscript" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="font-bold text-slate-800 text-sm">LaTeX Exam (.tex)</div>
+            <div class="text-xs text-slate-500 mt-0.5">Ready for pdflatex compilation</div>
+          </div>
+        </button>
+
+        <!-- Export to Quizizz / Google Forms -->
+        <button onclick="app.exportFile('quiz_csv')" class="p-4 rounded-xl border border-slate-200 hover:border-indigo-500 hover:bg-indigo-50/50 text-left transition-all flex items-start space-x-3 group sm:col-span-2">
+          <div class="p-2 rounded-lg bg-pink-100 text-pink-600 group-hover:bg-pink-600 group-hover:text-white transition-colors">
+            <i data-lucide="check-check" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="font-bold text-slate-800 text-sm">Google Forms / Quizizz / Kahoot Format</div>
+            <div class="text-xs text-slate-500 mt-0.5">Standard quiz template ready for bulk importing</div>
+          </div>
+        </button>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ADD / EDIT QUESTION MODAL -->
+  <div id="edit-question-modal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 animate-fade-in max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+        <h3 id="modal-q-title" class="font-bold text-slate-900 text-base">Edit Question</h3>
+        <button onclick="app.closeQuestionModal()" class="p-1 text-slate-400 hover:text-slate-700"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <div class="space-y-4 flex-1 overflow-y-auto pr-1">
+        <input type="hidden" id="modal-q-id">
+
+        <div class="grid grid-cols-3 gap-3">
+          <div>
+            <label class="text-xs font-semibold text-slate-600 block mb-1">Question No.</label>
+            <input type="text" id="modal-q-num" class="w-full text-xs p-2 rounded-lg border border-slate-300">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-slate-600 block mb-1">Marks</label>
+            <input type="number" id="modal-q-marks" class="w-full text-xs p-2 rounded-lg border border-slate-300" min="0.5" step="0.5">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-slate-600 block mb-1">Type</label>
+            <select id="modal-q-type" class="w-full text-xs p-2 rounded-lg border border-slate-300" onchange="app.onModalTypeChange()">
+              <option value="mcq">MCQ (Multiple Choice)</option>
+              <option value="short_answer">Short Answer</option>
+              <option value="long_answer">Long Answer</option>
+              <option value="numerical">Numerical / Math</option>
+              <option value="fill_blank">Fill in Blanks</option>
+              <option value="true_false">True / False</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="text-xs font-semibold text-slate-600 block mb-1">Question Text (Supports LaTeX $x^2$, \frac{a}{b})</label>
+          <textarea id="modal-q-text" rows="3" class="w-full text-xs p-2.5 rounded-lg border border-slate-300 font-mono"></textarea>
+        </div>
+
+        <!-- Options Container for MCQs -->
+        <div id="modal-options-wrapper" class="space-y-2">
+          <label class="text-xs font-semibold text-slate-600 block">Options & Correct Answer</label>
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div class="flex items-center space-x-1">
+              <span class="font-bold text-slate-500 w-4">A:</span>
+              <input type="text" id="modal-opt-A" class="flex-1 p-1.5 rounded border border-slate-300">
+            </div>
+            <div class="flex items-center space-x-1">
+              <span class="font-bold text-slate-500 w-4">B:</span>
+              <input type="text" id="modal-opt-B" class="flex-1 p-1.5 rounded border border-slate-300">
+            </div>
+            <div class="flex items-center space-x-1">
+              <span class="font-bold text-slate-500 w-4">C:</span>
+              <input type="text" id="modal-opt-C" class="flex-1 p-1.5 rounded border border-slate-300">
+            </div>
+            <div class="flex items-center space-x-1">
+              <span class="font-bold text-slate-500 w-4">D:</span>
+              <input type="text" id="modal-opt-D" class="flex-1 p-1.5 rounded border border-slate-300">
+            </div>
+          </div>
+          <div>
+            <label class="text-xs text-slate-500 block mt-1">Correct Option Key</label>
+            <input type="text" id="modal-q-correct" placeholder="e.g. A, B, C, or D" class="w-32 text-xs p-1.5 rounded border border-slate-300 uppercase">
+          </div>
+        </div>
+
+        <div>
+          <label class="text-xs font-semibold text-slate-600 block mb-1">Explanation / Solution Notes (Optional)</label>
+          <textarea id="modal-q-explanation" rows="2" class="w-full text-xs p-2 rounded-lg border border-slate-300"></textarea>
+        </div>
+      </div>
+
+      <div class="pt-4 border-t border-slate-100 flex justify-end space-x-2">
+        <button onclick="app.closeQuestionModal()" class="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg">Cancel</button>
+        <button onclick="app.saveQuestionModalChanges()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg">Save Question</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GEMINI AI MULTI-KEY & MODEL SETTINGS MODAL -->
+  <div id="ai-key-modal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 animate-fade-in overflow-hidden">
+      
+      <!-- Modal Header -->
+      <div class="p-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-slate-50 to-indigo-50/30">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-indigo-600 text-white flex items-center justify-center shadow-sm">
+            <i data-lucide="key" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-slate-900 text-base flex items-center gap-2">
+              Gemini API Keys Pool & Model Settings
+              <span class="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">Anti-Rate-Limit</span>
+            </h3>
+            <p class="text-xs text-slate-500">Configure multiple Gemini API keys to automatically bypass 429 rate limits via smart rotation.</p>
+          </div>
+        </div>
+        <button onclick="app.closeAiKeyModal()" class="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-white/80 transition-colors">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Quick Metrics Strip -->
+      <div class="px-6 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs">
+        <div class="flex items-center space-x-4">
+          <span>Active Keys: <strong id="modal-stat-active" class="text-emerald-600 font-bold">0</strong></span>
+          <span>In Cooldown: <strong id="modal-stat-cooldown" class="text-amber-600 font-bold">0</strong></span>
+          <span>Total: <strong id="modal-stat-total" class="text-slate-700 font-bold">0</strong></span>
+        </div>
+        <div class="flex items-center space-x-1">
+          <span class="text-slate-500">Strategy:</span>
+          <span id="modal-stat-strategy" class="font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">Auto-Failover</span>
+        </div>
+      </div>
+
+      <!-- Modal Tabs Navigation -->
+      <div class="flex border-b border-slate-200 px-6 pt-3 space-x-2 bg-white">
+        <button type="button" id="tab-btn-modal-keys" onclick="app.setKeyModalTab('keys')" class="pb-2.5 px-3 text-xs font-bold border-b-2 border-indigo-600 text-indigo-600 flex items-center gap-1.5 transition-all">
+          <i data-lucide="list" class="w-3.5 h-3.5"></i> Keys Pool (<span id="tab-keys-count">0</span>)
+        </button>
+        <button type="button" id="tab-btn-modal-add" onclick="app.setKeyModalTab('add')" class="pb-2.5 px-3 text-xs font-semibold text-slate-500 hover:text-slate-900 flex items-center gap-1.5 transition-all">
+          <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i> + Add Keys
+        </button>
+        <button type="button" id="tab-btn-modal-model" onclick="app.setKeyModalTab('model')" class="pb-2.5 px-3 text-xs font-semibold text-slate-500 hover:text-slate-900 flex items-center gap-1.5 transition-all">
+          <i data-lucide="cpu" class="w-3.5 h-3.5"></i> Model & Strategy
+        </button>
+      </div>
+
+      <!-- Modal Scrollable Content Area -->
+      <div class="p-6 overflow-y-auto flex-1 space-y-4">
+
+        <!-- TAB 1: KEYS POOL TABLE -->
+        <div id="tab-content-modal-keys" class="space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-slate-700">Configured API Keys:</span>
+            <div class="space-x-2">
+              <button onclick="app.resetAllKeyCooldowns()" class="text-[11px] font-semibold text-amber-700 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-200 transition-colors">
+                <i data-lucide="refresh-cw" class="w-3 h-3 inline mr-1"></i> Reset Cooldowns
+              </button>
+              <button onclick="app.clearAllKeys()" class="text-[11px] font-semibold text-red-600 hover:text-red-800 hover:underline">
+                Clear All
+              </button>
+            </div>
+          </div>
+
+          <div class="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+            <table class="min-w-full divide-y divide-slate-200 text-xs">
+              <thead class="bg-slate-50 text-slate-600 font-semibold">
+                <tr>
+                  <th class="px-3 py-2.5 text-left">Key Label</th>
+                  <th class="px-3 py-2.5 text-left">Masked Key</th>
+                  <th class="px-3 py-2.5 text-left">Status</th>
+                  <th class="px-3 py-2.5 text-center">Requests / 429s</th>
+                  <th class="px-3 py-2.5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="modal-keys-table-body" class="divide-y divide-slate-100 bg-white">
+                <!-- Dynamically rendered by app.renderKeysTable() -->
+              </tbody>
+            </table>
+          </div>
+
+          <div id="keys-empty-notice" class="hidden text-center py-6 text-slate-400 text-xs space-y-2">
+            <i data-lucide="key-round" class="w-8 h-8 mx-auto text-slate-300"></i>
+            <p>No Gemini API keys added yet. Click <strong>"+ Add Keys"</strong> to configure your keys.</p>
+          </div>
+        </div>
+
+        <!-- TAB 2: ADD KEYS (SINGLE & BULK) -->
+        <div id="tab-content-modal-add" class="hidden space-y-5">
+          <!-- Single Key Ingestion -->
+          <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+            <div class="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+              <i data-lucide="plus" class="w-3.5 h-3.5 text-indigo-600"></i> Add Single Key
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <input type="text" id="add-key-label" placeholder="Nickname (e.g. Personal Key)" class="text-xs p-2.5 rounded-lg border border-slate-300 bg-white sm:col-span-1 focus:ring-2 focus:ring-indigo-500">
+              <input type="password" id="add-key-value" placeholder="Paste Gemini API Key (AQ.Ab... or AIzaSy...)" class="text-xs p-2.5 rounded-lg border border-slate-300 bg-white sm:col-span-2 font-mono focus:ring-2 focus:ring-indigo-500">
+            </div>
+            <button onclick="app.addSingleKeyFromModal()" class="w-full sm:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5">
+              <i data-lucide="check" class="w-3.5 h-3.5"></i> Add Key to Pool
+            </button>
+          </div>
+
+          <!-- Bulk Import -->
+          <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+            <div class="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+              <i data-lucide="layers" class="w-3.5 h-3.5 text-amber-600"></i> Bulk Import Multiple Keys (Recommended to avoid limits)
+            </div>
+            <p class="text-[11px] text-slate-500">Paste multiple Gemini API keys at once (one key per line, comma or semicolon separated):</p>
+            <textarea id="add-keys-bulk" rows="4" placeholder="AQ.Ab...key1&#10;AQ.Ab...key2&#10;AIzaSy...key3" class="w-full text-xs p-2.5 rounded-lg border border-slate-300 bg-white font-mono focus:ring-2 focus:ring-indigo-500"></textarea>
+            <button onclick="app.addBulkKeysFromModal()" class="w-full sm:w-auto px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs rounded-lg shadow-sm transition-all flex items-center justify-center gap-1.5">
+              <i data-lucide="download-cloud" class="w-3.5 h-3.5"></i> Import All Keys
+            </button>
+          </div>
+        </div>
+
+        <!-- TAB 3: MODEL & ROTATION STRATEGY -->
+        <div id="tab-content-modal-model" class="hidden space-y-4 text-xs">
+          <!-- Model Selection -->
+          <div class="space-y-2">
+            <label class="font-bold text-slate-800 block">Default Extraction Model</label>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <label class="flex items-start space-x-2.5 p-3 rounded-xl border border-slate-200 hover:border-indigo-400 bg-white cursor-pointer transition-colors">
+                <input type="radio" name="modal-model-radio" value="gemini-3.6-flash" onchange="app.onModalModelRadioChange('gemini-3.6-flash')" class="mt-0.5 text-indigo-600" checked>
+                <div>
+                  <div class="font-bold text-slate-900 flex items-center gap-1">
+                    Gemini 3.6 Flash
+                    <span class="text-[10px] bg-indigo-100 text-indigo-800 px-1.5 py-0.2 rounded font-semibold">Recommended</span>
+                  </div>
+                  <div class="text-[11px] text-slate-500 mt-0.5">Google's recommended Flash model: ultra-fast, native PDF & multimodal vision.</div>
+                </div>
+              </label>
+
+              <label class="flex items-start space-x-2.5 p-3 rounded-xl border border-slate-200 hover:border-indigo-400 bg-white cursor-pointer transition-colors">
+                <input type="radio" name="modal-model-radio" value="gemini-2.5-flash" onchange="app.onModalModelRadioChange('gemini-2.5-flash')" class="mt-0.5 text-indigo-600">
+                <div>
+                  <div class="font-bold text-slate-900 flex items-center gap-1">
+                    Gemini 2.5 Flash
+                    <span class="text-[10px] bg-sky-100 text-sky-800 px-1.5 py-0.2 rounded font-semibold">Fast</span>
+                  </div>
+                  <div class="text-[11px] text-slate-500 mt-0.5">High accuracy, fast multimodal vision & 1M context.</div>
+                </div>
+              </label>
+
+              <label class="flex items-start space-x-2.5 p-3 rounded-xl border border-slate-200 hover:border-indigo-400 bg-white cursor-pointer transition-colors">
+                <input type="radio" name="modal-model-radio" value="gemini-2.5-pro" onchange="app.onModalModelRadioChange('gemini-2.5-pro')" class="mt-0.5 text-indigo-600">
+                <div>
+                  <div class="font-bold text-slate-900 flex items-center gap-1">
+                    Gemini 2.5 Pro
+                    <span class="text-[10px] bg-purple-100 text-purple-800 px-1.5 py-0.2 rounded font-semibold">Deep Reasoning</span>
+                  </div>
+                  <div class="text-[11px] text-slate-500 mt-0.5">Advanced reasoning for difficult math equations, complex tables & diagrams.</div>
+                </div>
+              </label>
+
+              <label class="flex items-start space-x-2.5 p-3 rounded-xl border border-slate-200 hover:border-indigo-400 bg-white cursor-pointer transition-colors">
+                <input type="radio" name="modal-model-radio" value="gemini-2.5-flash-lite" onchange="app.onModalModelRadioChange('gemini-2.5-flash-lite')" class="mt-0.5 text-indigo-600">
+                <div>
+                  <div class="font-bold text-slate-900 flex items-center gap-1">
+                    Gemini 2.5 Flash Lite
+                    <span class="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-semibold">Ultra Fast</span>
+                  </div>
+                  <div class="text-[11px] text-slate-500 mt-0.5">Lowest latency, high quota efficiency.</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Rotation Strategy Selection -->
+          <div class="space-y-2 pt-2 border-t border-slate-100">
+            <label class="font-bold text-slate-800 block">Key Rotation Strategy (Rate-Limit Avoidance)</label>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <label class="flex items-start space-x-2.5 p-3 rounded-xl border border-slate-200 hover:border-indigo-400 bg-white cursor-pointer transition-colors">
+                <input type="radio" name="modal-strategy-radio" value="auto_failover" onchange="app.onStrategyRadioChange('auto_failover')" class="mt-0.5 text-indigo-600" checked>
+                <div>
+                  <div class="font-bold text-slate-900">Auto-Failover (Recommended)</div>
+                  <div class="text-[11px] text-slate-500 mt-0.5">Uses primary key continuously until HTTP 429 quota is hit, then instantly rotates to the next available key with 0 downtime.</div>
+                </div>
+              </label>
+
+              <label class="flex items-start space-x-2.5 p-3 rounded-xl border border-slate-200 hover:border-indigo-400 bg-white cursor-pointer transition-colors">
+                <input type="radio" name="modal-strategy-radio" value="round_robin" onchange="app.onStrategyRadioChange('round_robin')" class="mt-0.5 text-indigo-600">
+                <div>
+                  <div class="font-bold text-slate-900">Round-Robin Rotation</div>
+                  <div class="text-[11px] text-slate-500 mt-0.5">Distributes requests evenly across all active keys, keeping requests-per-minute low on each individual key.</div>
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Privacy & Google AI Studio Link -->
+        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1 text-[11px] text-slate-500">
+          <div class="font-bold text-slate-700 flex items-center gap-1">
+            <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-600"></i> Privacy & Client-Side Security
+          </div>
+          <p>
+            Your API keys are stored exclusively in your browser's local storage (<code class="bg-white px-1 rounded border">localStorage</code>). Requests go directly to Google's official Gemini endpoint. No keys or files ever touch any third-party server.
+          </p>
+          <div class="pt-1">
+            Need free Gemini API keys? <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-indigo-600 hover:underline font-semibold">Generate free keys at Google AI Studio &rarr;</a>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-4 border-t border-slate-100 flex justify-between items-center bg-slate-50">
+        <span class="text-xs text-slate-500" id="modal-footer-status">All changes saved automatically.</span>
+        <button onclick="app.closeAiKeyModal()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-sm transition-all">
+          Done & Return to Studio
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===================================================== -->
+  <!-- MODAL: PAPER VAULT & MULTI-EXAM REPOSITORY -->
+  <!-- ===================================================== -->
+  <div id="paper-vault-modal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fade-in">
+    <div class="bg-white w-full max-w-5xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+      
+      <!-- Modal Header -->
+      <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-slate-50 to-indigo-50/40">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-200">
+            <i data-lucide="archive" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+              Question Paper Vault & Multi-Year Repository
+              <span id="vault-modal-badge" class="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800">0 Papers Stored</span>
+            </h3>
+            <p class="text-xs text-slate-500">Store all previous question papers offline in your browser, select papers, and discover exam design logic with Gemini AI.</p>
+          </div>
+        </div>
+        <button onclick="app.closeVaultModal()" class="p-2 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-white/80 transition-colors">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Vault Action Bar -->
+      <div class="p-4 bg-slate-50/80 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div class="flex items-center space-x-3">
+          <!-- View Switcher -->
+          <div class="flex items-center space-x-1 bg-slate-200/70 p-0.5 rounded-lg">
+            <button id="btn-vault-view-hierarchy" onclick="app.setVaultView('hierarchy')" class="px-2.5 py-1 text-xs font-bold rounded-md bg-white text-indigo-700 shadow-xs flex items-center gap-1 transition-all" title="View organized by Paper & Specialization with Years inside">
+              <i data-lucide="folder-tree" class="w-3.5 h-3.5"></i>
+              <span>Paper & Branch Folders</span>
+            </button>
+            <button id="btn-vault-view-table" onclick="app.setVaultView('table')" class="px-2.5 py-1 text-xs font-semibold rounded-md text-slate-600 hover:text-slate-900 flex items-center gap-1 transition-all" title="View as flat table">
+              <i data-lucide="list" class="w-3.5 h-3.5"></i>
+              <span>Flat Table</span>
+            </button>
+          </div>
+
+          <label class="flex items-center space-x-1.5 cursor-pointer font-semibold text-slate-700">
+            <input type="checkbox" id="vault-select-all" onchange="app.toggleSelectAllVault(this.checked)" class="rounded text-indigo-600 focus:ring-indigo-500">
+            <span>Select All</span>
+          </label>
+          <span class="text-slate-300">|</span>
+          <span id="vault-selection-counter" class="text-slate-500 font-medium">0 papers selected</span>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- Analyze Button -->
+          <button onclick="app.analyzeSelectedPapersWithGemini()" id="btn-vault-analyze" disabled class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-xs shadow-sm transition-all flex items-center gap-1.5 opacity-50 cursor-not-allowed">
+            <i data-lucide="sparkles" class="w-4 h-4 text-amber-300"></i>
+            <span>Analyze Exam Patterns (Gemini AI)</span>
+          </button>
+
+          <!-- Export Backup -->
+          <button onclick="app.exportVaultBackup()" class="px-3 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 font-semibold text-xs border border-slate-300 transition-colors flex items-center gap-1">
+            <i data-lucide="download" class="w-3.5 h-3.5 text-slate-500"></i> Export Backup
+          </button>
+
+          <!-- Import Backup -->
+          <button onclick="document.getElementById('vault-file-import-input').click()" class="px-3 py-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 font-semibold text-xs border border-slate-300 transition-colors flex items-center gap-1">
+            <i data-lucide="upload" class="w-3.5 h-3.5 text-slate-500"></i> Import JSON
+          </button>
+          <input type="file" id="vault-file-import-input" accept=".json" onchange="app.handleVaultFileImport(event)" class="hidden">
+
+          <!-- Create New Exam Folder -->
+          <button onclick="app.openNewFolderModal()" class="px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-semibold text-xs transition-colors flex items-center gap-1" title="Define a new State Exam or Paper Branch folder manually">
+            <i data-lucide="folder-plus" class="w-3.5 h-3.5 text-amber-600"></i> + New Exam Folder
+          </button>
+
+          <!-- Add Paper -->
+          <button onclick="app.addNewPaperToVaultFromUpload()" class="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs transition-colors flex items-center gap-1">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i> + Upload Paper
+          </button>
+        </div>
+      </div>
+
+      <!-- Vault Papers List -->
+      <div class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+        <div id="vault-empty-state" class="hidden text-center py-12 space-y-3">
+          <div class="w-14 h-14 mx-auto rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+            <i data-lucide="inbox" class="w-7 h-7"></i>
+          </div>
+          <h4 class="font-bold text-slate-800 text-sm">Your Paper Vault is Empty</h4>
+          <p class="text-xs text-slate-500 max-w-md mx-auto">
+            Extract any question paper from PDF or image, and it will be stored here automatically. You can also import existing question paper JSON files.
+          </p>
+          <button onclick="app.loadSamplePapersToVault()" class="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-lg transition-colors inline-flex items-center gap-1.5">
+            <i data-lucide="file-plus" class="w-3.5 h-3.5"></i> Load Sample Exam Papers
+          </button>
+        </div>
+
+        <!-- HIERARCHICAL FOLDERS VIEW (Board ➔ Exam ➔ Paper / Specialization ➔ Years) -->
+        <div id="vault-hierarchy-container" class="space-y-4">
+          <!-- Dynamically populated -->
+        </div>
+
+        <!-- FLAT TABLE VIEW -->
+        <div id="vault-papers-table-container" class="hidden border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+          <table class="min-w-full divide-y divide-slate-200 text-left text-xs">
+            <thead class="bg-slate-50 font-semibold text-slate-700">
+              <tr>
+                <th class="w-10 px-3 py-2.5 text-center"></th>
+                <th class="px-3 py-2.5">Exam Title & Details</th>
+                <th class="px-3 py-2.5">Board / Exam</th>
+                <th class="px-3 py-2.5">Paper / Branch</th>
+                <th class="px-3 py-2.5 text-center">Year</th>
+                <th class="px-3 py-2.5 text-center">Questions</th>
+                <th class="px-3 py-2.5 text-center">Total Marks</th>
+                <th class="px-3 py-2.5 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="vault-papers-table-body" class="divide-y divide-slate-100 bg-white">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-4 border-t border-slate-100 flex justify-between items-center bg-slate-50 text-xs text-slate-500">
+        <span>Stored persistently in client-side IndexedDB. Zero data sent to any third-party server.</span>
+        <button onclick="app.closeVaultModal()" class="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold rounded-lg transition-colors">
+          Close
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===================================================== -->
+  <!-- MODAL: EDIT PAPER CLASSIFICATION (BOARD / EXAM / BRANCH / YEAR) -->
+  <!-- ===================================================== -->
+  <div id="paper-classify-modal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fade-in">
+    <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+      <div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-indigo-900 to-indigo-800 text-white">
+        <div class="flex items-center space-x-2.5">
+          <i data-lucide="tag" class="w-4 h-4 text-amber-300"></i>
+          <h4 class="text-sm font-bold">Classify & Organize Exam Paper</h4>
+        </div>
+        <button onclick="app.closeClassifyModal()" class="p-1 text-white/70 hover:text-white rounded-lg hover:bg-white/10 transition-colors">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <div class="p-5 space-y-4 text-xs">
+        <input type="hidden" id="classify-paper-id">
+
+        <!-- Title -->
+        <div>
+          <label class="block text-slate-700 font-semibold mb-1">Paper Title</label>
+          <input type="text" id="classify-title" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-xs">
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <!-- Board -->
+          <div>
+            <label class="block text-slate-700 font-semibold mb-1">State / Commission Board</label>
+            <input type="text" id="classify-board" placeholder="e.g. TGPSC (Telangana Board), APPSC, UPSC" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-xs">
+          </div>
+
+          <!-- Exam -->
+          <div>
+            <label class="block text-slate-700 font-semibold mb-1">Exam / Recruitment</label>
+            <input type="text" id="classify-exam" placeholder="e.g. AEE, Police Constable, Group 1" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-xs">
+          </div>
+        </div>
+
+        <!-- Paper Category (Common vs Specialization) -->
+        <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+          <label class="block text-slate-800 font-bold">Paper Category</label>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="flex items-center space-x-2 p-2 rounded-lg bg-white border border-slate-200 cursor-pointer hover:border-indigo-400">
+              <input type="radio" name="classify-paper-type" value="common" onchange="app.onClassifyPaperTypeChange(this.value)" class="text-indigo-600 focus:ring-indigo-500">
+              <div>
+                <div class="font-bold text-slate-800">📘 Common Paper</div>
+                <div class="text-[10px] text-slate-500">GS & Mental Ability (All Branches)</div>
+              </div>
+            </label>
+            <label class="flex items-center space-x-2 p-2 rounded-lg bg-white border border-slate-200 cursor-pointer hover:border-indigo-400">
+              <input type="radio" name="classify-paper-type" value="specialization" onchange="app.onClassifyPaperTypeChange(this.value)" class="text-indigo-600 focus:ring-indigo-500">
+              <div>
+                <div class="font-bold text-slate-800">📙 Specialization</div>
+                <div class="text-[10px] text-slate-500">Civil, Mech, Electrical, etc.</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <!-- Specialization / Branch -->
+          <div class="sm:col-span-2">
+            <label class="block text-slate-700 font-semibold mb-1">Branch / Discipline Name</label>
+            <input type="text" id="classify-specialization" placeholder="e.g. Civil Engineering, Mechanical, GS&MA" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-xs">
+          </div>
+
+          <!-- Exam Year -->
+          <div>
+            <label class="block text-slate-700 font-semibold mb-1">Exam Year</label>
+            <input type="text" id="classify-year" placeholder="e.g. 2023, 2015" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-xs">
+          </div>
+        </div>
+
+        <!-- Paper Code -->
+        <div>
+          <label class="block text-slate-700 font-semibold mb-1">Paper Number / Code</label>
+          <input type="text" id="classify-paper-code" placeholder="e.g. Paper 1, Paper 2, Technical Paper" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-xs">
+        </div>
+      </div>
+
+      <div class="p-4 border-t border-slate-100 flex justify-end space-x-2 bg-slate-50 text-xs">
+        <button onclick="app.closeClassifyModal()" class="px-3.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold rounded-lg transition-colors">
+          Cancel
+        </button>
+        <button onclick="app.saveClassificationFromModal()" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-colors flex items-center gap-1">
+          <i data-lucide="check" class="w-3.5 h-3.5"></i> Save Classification
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================== -->
+  <!-- MODAL: CREATE NEW EXAM / PAPER FOLDER -->
+  <!-- ===================================================== -->
+  <div id="new-folder-modal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fade-in">
+    <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+      <div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-amber-600 to-amber-700 text-white">
+        <div class="flex items-center space-x-2.5">
+          <i data-lucide="folder-plus" class="w-4 h-4 text-amber-200"></i>
+          <h4 class="text-sm font-bold">Create Exam & Paper Branch Folder</h4>
+        </div>
+        <button onclick="app.closeNewFolderModal()" class="p-1 text-white/70 hover:text-white rounded-lg hover:bg-white/10 transition-colors">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <div class="p-5 space-y-4 text-xs">
+        <div class="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 leading-relaxed text-[11px]">
+          💡 Define your State Board exam stream up-front. Once created, you can open this folder and upload multiple exam years (2015, 2018, 2023, 2024...) directly under it.
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <!-- Board -->
+          <div>
+            <label class="block text-slate-700 font-semibold mb-1">State / Board Authority <span class="text-rose-500">*</span></label>
+            <input type="text" id="new-folder-board" list="board-datalist" placeholder="e.g. TGPSC (Telangana Board)" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 text-xs">
+            <datalist id="board-datalist">
+              <option value="TGPSC (Telangana Board)">
+              <option value="TSLPRB (Telangana Police)">
+              <option value="APPSC (Andhra Pradesh)">
+              <option value="UPSC (Union Public Service Commission)">
+              <option value="SSC (Staff Selection Commission)">
+              <option value="CBSE Board">
+            </datalist>
+          </div>
+
+          <!-- Exam -->
+          <div>
+            <label class="block text-slate-700 font-semibold mb-1">Exam / Recruitment Name <span class="text-rose-500">*</span></label>
+            <input type="text" id="new-folder-exam" placeholder="e.g. AEE, Police Constable, Group 1" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 text-xs">
+          </div>
+        </div>
+
+        <!-- Paper Category -->
+        <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+          <label class="block text-slate-800 font-bold">Paper Category <span class="text-rose-500">*</span></label>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="flex items-center space-x-2 p-2 rounded-lg bg-white border border-slate-200 cursor-pointer hover:border-indigo-400">
+              <input type="radio" name="new-folder-paper-type" value="common" checked onchange="app.onNewFolderTypeChange(this.value)" class="text-indigo-600 focus:ring-indigo-500">
+              <div>
+                <div class="font-bold text-slate-800">📘 Common Paper</div>
+                <div class="text-[10px] text-slate-500">GS & Mental Ability (All Branches)</div>
+              </div>
+            </label>
+            <label class="flex items-center space-x-2 p-2 rounded-lg bg-white border border-slate-200 cursor-pointer hover:border-amber-400">
+              <input type="radio" name="new-folder-paper-type" value="specialization" onchange="app.onNewFolderTypeChange(this.value)" class="text-amber-600 focus:ring-amber-500">
+              <div>
+                <div class="font-bold text-slate-800">📙 Specialization</div>
+                <div class="text-[10px] text-slate-500">Civil, Mechanical, EEE, CSE, etc.</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <!-- Specialization Name -->
+          <div class="sm:col-span-2">
+            <label class="block text-slate-700 font-semibold mb-1">Specialization / Discipline <span class="text-rose-500">*</span></label>
+            <input type="text" id="new-folder-specialization" value="General Studies & Mental Ability (GS&MA)" placeholder="e.g. Civil Engineering, Mechanical, Electrical" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 text-xs">
+          </div>
+
+          <!-- Paper Code -->
+          <div>
+            <label class="block text-slate-700 font-semibold mb-1">Paper Code</label>
+            <input type="text" id="new-folder-paper-code" value="Paper 1" placeholder="e.g. Paper 1, Paper 2" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500 text-xs">
+          </div>
+        </div>
+      </div>
+
+      <div class="p-4 border-t border-slate-100 flex justify-end space-x-2 bg-slate-50 text-xs">
+        <button onclick="app.closeNewFolderModal()" class="px-3.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold rounded-lg transition-colors">
+          Cancel
+        </button>
+        <button onclick="app.saveNewFolderFromModal()" class="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg transition-colors flex items-center gap-1">
+          <i data-lucide="check" class="w-3.5 h-3.5"></i> Create Folder
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================== -->
+  <!-- MODAL: TARGETED IN-FOLDER PAPER UPLOAD -->
+  <!-- ===================================================== -->
+  <div id="folder-upload-modal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fade-in">
+    <div class="bg-white w-full max-w-xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+      <div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-indigo-900 via-indigo-800 to-purple-900 text-white">
+        <div class="flex items-center space-x-2.5">
+          <i data-lucide="upload-cloud" class="w-4 h-4 text-amber-300"></i>
+          <h4 class="text-sm font-bold">Upload Paper Directly into Folder</h4>
+        </div>
+        <button onclick="app.closeFolderUploadModal()" class="p-1 text-white/70 hover:text-white rounded-lg hover:bg-white/10 transition-colors">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <div class="p-5 space-y-4 text-xs">
+        <!-- Target Destination Breadcrumb Banner -->
+        <div class="p-3 bg-indigo-50/80 rounded-xl border border-indigo-200 text-indigo-950 space-y-1">
+          <div class="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Target Storage Destination:</div>
+          <div class="font-extrabold text-xs flex flex-wrap items-center gap-1.5">
+            <span id="target-breadcrumb-board" class="px-2 py-0.5 bg-white rounded border border-indigo-200">🏛️ Board</span>
+            <span>➔</span>
+            <span id="target-breadcrumb-exam" class="px-2 py-0.5 bg-white rounded border border-indigo-200">📋 Exam</span>
+            <span>➔</span>
+            <span id="target-breadcrumb-branch" class="px-2 py-0.5 bg-indigo-100 rounded border border-indigo-300 text-indigo-900 font-bold">📘 Paper / Branch</span>
+          </div>
+        </div>
+
+        <!-- Inputs: Year & Title -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="block text-slate-700 font-semibold mb-1">Exam Year <span class="text-rose-500">*</span></label>
+            <input type="text" id="target-upload-year" placeholder="e.g. 2024, 2023, 2018" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-xs font-bold text-slate-900">
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block text-slate-700 font-semibold mb-1">Paper Title (Optional)</label>
+            <input type="text" id="target-upload-title" placeholder="Auto-generated if left blank" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 text-xs">
+          </div>
+        </div>
+
+        <!-- Engine Choice -->
+        <div class="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+          <span class="text-slate-700 font-semibold text-xs">Extraction Engine:</span>
+          <div class="flex items-center space-x-2">
+            <label class="flex items-center space-x-1.5 cursor-pointer">
+              <input type="radio" name="target-upload-engine" value="gemini" checked class="text-indigo-600">
+              <span class="font-bold text-indigo-900">🤖 Gemini AI</span>
+            </label>
+            <label class="flex items-center space-x-1.5 cursor-pointer">
+              <input type="radio" name="target-upload-engine" value="local" class="text-slate-600">
+              <span class="font-medium text-slate-700">⚡ Local (Zero-API)</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- File Upload Dropzone -->
+        <div id="target-upload-dropzone" onclick="document.getElementById('target-upload-file-input').click()" class="border-2 border-dashed border-slate-300 hover:border-indigo-500 bg-slate-50/50 hover:bg-indigo-50/20 rounded-xl p-5 text-center cursor-pointer transition-colors space-y-2">
+          <div class="w-10 h-10 mx-auto rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center">
+            <i data-lucide="file-up" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div id="target-dropzone-label" class="font-bold text-slate-700 text-xs">Click to browse or drop PDF / DOCX / Image</div>
+            <div class="text-[10px] text-slate-400 mt-0.5">Supports Question Paper PDFs, Word files, Scanned Images & Screenshots</div>
+          </div>
+          <input type="file" id="target-upload-file-input" accept=".pdf,.docx,.txt,image/*" onchange="app.onTargetFolderFileSelected(event)" class="hidden">
+        </div>
+
+        <!-- Progress Indicator -->
+        <div id="target-upload-progress" class="hidden space-y-2 p-3 bg-indigo-50 rounded-xl border border-indigo-100">
+          <div class="flex justify-between text-xs font-semibold text-indigo-900">
+            <span id="target-progress-label">Extracting question paper...</span>
+            <span id="target-progress-percent">0%</span>
+          </div>
+          <div class="w-full bg-indigo-200 rounded-full h-2 overflow-hidden">
+            <div id="target-progress-bar" class="bg-indigo-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-4 border-t border-slate-100 flex justify-end space-x-2 bg-slate-50 text-xs">
+        <button onclick="app.closeFolderUploadModal()" id="target-upload-cancel-btn" class="px-3.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold rounded-lg transition-colors">
+          Cancel
+        </button>
+        <button onclick="app.executeFolderUpload()" id="target-upload-submit-btn" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-colors flex items-center gap-1">
+          <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-300"></i> Extract & Store in Folder
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================== -->
+  <!-- MODAL: EXAM INTELLIGENCE & PATTERN DISCOVERY STUDIO -->
+  <!-- ===================================================== -->
+  <div id="pattern-analysis-modal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 overflow-y-auto animate-fade-in">
+    <div class="bg-white w-full max-w-6xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+      
+      <!-- Modal Header -->
+      <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-indigo-900 via-indigo-800 to-purple-900 text-white">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center backdrop-blur-sm border border-white/20">
+            <i data-lucide="sparkles" class="w-5 h-5 text-amber-300"></i>
+          </div>
+          <div>
+            <h3 id="analysis-modal-title" class="text-base font-bold flex items-center gap-2">
+              Exam Blueprint & Pattern Discovery
+            </h3>
+            <p id="analysis-modal-subtitle" class="text-xs text-indigo-200">
+              Cross-Exam Intelligence by Gemini AI
+            </p>
+          </div>
+        </div>
+        
+        <div class="flex items-center space-x-2">
+          <button onclick="app.downloadAnalysisMarkdown()" class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white font-semibold text-xs border border-white/20 transition-colors flex items-center gap-1">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i> Export .MD
+          </button>
+          <button onclick="window.print()" class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white font-semibold text-xs border border-white/20 transition-colors flex items-center gap-1">
+            <i data-lucide="printer" class="w-3.5 h-3.5"></i> Print / PDF
+          </button>
+          <button onclick="app.closePatternAnalysisModal()" class="p-1.5 text-white/70 hover:text-white rounded-lg hover:bg-white/10 transition-colors">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Tab Navigation -->
+      <div class="px-6 border-b border-slate-200 bg-slate-50 flex overflow-x-auto no-scrollbar space-x-2 text-xs">
+        <button onclick="app.setAnalysisTab('blueprint')" id="tab-analysis-blueprint" class="py-3 px-3 font-bold border-b-2 border-indigo-600 text-indigo-600 flex items-center gap-1.5 whitespace-nowrap">
+          <i data-lucide="layout-grid" class="w-3.5 h-3.5"></i> Executive Blueprint
+        </button>
+        <button onclick="app.setAnalysisTab('topics')" id="tab-analysis-topics" class="py-3 px-3 font-semibold text-slate-600 hover:text-slate-900 border-b-2 border-transparent flex items-center gap-1.5 whitespace-nowrap">
+          <i data-lucide="pie-chart" class="w-3.5 h-3.5"></i> Topic Weightage Matrix
+        </button>
+        <button onclick="app.setAnalysisTab('traps')" id="tab-analysis-traps" class="py-3 px-3 font-semibold text-slate-600 hover:text-slate-900 border-b-2 border-transparent flex items-center gap-1.5 whitespace-nowrap">
+          <i data-lucide="alert-triangle" class="w-3.5 h-3.5"></i> Question Logic & Traps
+        </button>
+        <button onclick="app.setAnalysisTab('forecast')" id="tab-analysis-forecast" class="py-3 px-3 font-semibold text-slate-600 hover:text-slate-900 border-b-2 border-transparent flex items-center gap-1.5 whitespace-nowrap">
+          <i data-lucide="trending-up" class="w-3.5 h-3.5"></i> Predictive Exam Forecast
+        </button>
+        <button onclick="app.setAnalysisTab('strategy')" id="tab-analysis-strategy" class="py-3 px-3 font-semibold text-slate-600 hover:text-slate-900 border-b-2 border-transparent flex items-center gap-1.5 whitespace-nowrap">
+          <i data-lucide="target" class="w-3.5 h-3.5"></i> 3-Round Strategy
+        </button>
+        <button onclick="app.setAnalysisTab('markdown')" id="tab-analysis-markdown" class="py-3 px-3 font-semibold text-slate-600 hover:text-slate-900 border-b-2 border-transparent flex items-center gap-1.5 whitespace-nowrap">
+          <i data-lucide="file-text" class="w-3.5 h-3.5"></i> Full Report Markdown
+        </button>
+      </div>
+
+      <!-- Tab Content Area -->
+      <div id="analysis-modal-body" class="flex-1 overflow-y-auto p-4 sm:p-6 text-slate-800 text-xs">
+        <!-- Rendered dynamically by app.renderAnalysisReport() -->
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-3 border-t border-slate-100 flex justify-between items-center bg-slate-50 text-xs text-slate-500">
+        <span id="analysis-footer-info">Generated by Gemini AI & PaperExtract Studio</span>
+        <div class="space-x-2">
+          <button onclick="app.copyAnalysisMarkdown()" class="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold rounded-lg transition-colors inline-flex items-center gap-1">
+            <i data-lucide="copy" class="w-3 h-3"></i> Copy Markdown
+          </button>
+          <button onclick="app.closePatternAnalysisModal()" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg transition-colors">
+            Done
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- APPLICATION SCRIPTS -->
+  <script src="js/samples.js"></script>
+  <script src="js/extractor.js"></script>
+  <script src="js/gemini-handler.js"></script>
+  <script src="js/paper-vault.js"></script>
+  <script src="js/paper-analyzer.js"></script>
+  <script src="js/pdf-handler.js"></script>
+  <script src="js/ocr-handler.js"></script>
+  <script src="js/docx-handler.js"></script>
+  <script src="js/quiz-mode.js"></script>
+  <script src="js/exporter.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "tasks": {
+    "start": "deno run --allow-net --allow-read main.ts",
+    "dev": "deno run --allow-net --allow-read --watch main.ts"
+  },
+  "imports": {
+    "@std/http/": "https://deno.land/std@0.224.0/http/"
+  },
+  "deploy": {
+    "project": "question-paper-extractor",
+    "entrypoint": "main.ts"
+  }
+}

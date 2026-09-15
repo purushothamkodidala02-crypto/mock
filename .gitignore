@@ -1,0 +1,9 @@
+# Dependency and cache
+node_modules/
+.deno/
+.env
+
+# Logs and scratch files
+*.log
+scratch/
+.system_generated/

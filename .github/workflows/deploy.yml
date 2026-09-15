@@ -1,0 +1,26 @@
+name: Deploy to Deno Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write # Needed for Deno Deploy authentication
+      contents: read  # Needed to clone the repository
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to Deno Deploy
+        uses: denoland/deployctl@v1
+        with:
+          project: "paper-extract-studio" # Replace with your Deno Deploy project name if different
+          entrypoint: "main.ts"

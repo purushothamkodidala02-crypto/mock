@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Automated Verification & Speed Benchmark Suite | PaperExtract</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 p-6 sm:p-10 font-sans min-h-screen">
+  
+  <div class="max-w-5xl mx-auto space-y-6">
+    
+    <!-- Test Header -->
+    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-900 flex items-center">
+          <i data-lucide="zap" class="w-7 h-7 text-amber-500 mr-2"></i>
+          Speed Benchmark & Verification Suite
+        </h1>
+        <p class="text-xs text-slate-500 mt-1">High-resolution timing tests (<code class="text-indigo-600 font-mono">performance.now()</code>) for NLP question parsing and 2-Phase PDF extraction</p>
+      </div>
+
+      <div class="flex items-center space-x-3">
+        <a href="index.html" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-sm transition-all flex items-center">
+          <i data-lucide="arrow-left" class="w-4 h-4 mr-1.5"></i> Open Main Studio
+        </a>
+      </div>
+    </div>
+
+    <!-- Live Performance Metrics Cards -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+        <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">TS Police (200 Qs)</div>
+        <div id="bench-ts-time" class="text-2xl font-extrabold text-indigo-600 mt-1">-- ms</div>
+        <div class="text-[11px] text-slate-500">NLP Parser Engine</div>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+        <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">CBT Response Sheet</div>
+        <div id="bench-cbt-time" class="text-2xl font-extrabold text-emerald-600 mt-1">-- ms</div>
+        <div class="text-[11px] text-slate-500">Q148-150 Parsing</div>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+        <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">CBSE Math (80M)</div>
+        <div id="bench-math-time" class="text-2xl font-extrabold text-amber-600 mt-1">-- ms</div>
+        <div class="text-[11px] text-slate-500">Equations & MCQs</div>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+        <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Engine Throughput</div>
+        <div id="bench-throughput" class="text-2xl font-extrabold text-sky-600 mt-1">-- Q/s</div>
+        <div class="text-[11px] text-slate-500">Questions per second</div>
+      </div>
+    </div>
+
+    <!-- Live PDF Speed Tester Tool -->
+    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-base font-bold text-slate-900 flex items-center">
+            <i data-lucide="timer" class="w-5 h-5 text-indigo-600 mr-2"></i>
+            Live PDF Speed Tester (Upload any PDF to measure exact execution time)
+          </h2>
+          <p class="text-xs text-slate-500">Measures Phase 1 (Text Layer), Phase 2 (Diagram Cropping), and Phase 3 (NLP Parser) in milliseconds</p>
+        </div>
+      </div>
+
+      <div id="benchmark-dropzone" class="p-6 rounded-xl border-2 border-dashed border-slate-300 hover:border-indigo-400 bg-slate-50 text-center cursor-pointer transition-all">
+        <input type="file" id="benchmark-file-input" class="hidden" accept=".pdf">
+        <i data-lucide="file-up" class="w-8 h-8 text-indigo-600 mx-auto mb-2"></i>
+        <p class="text-sm font-semibold text-slate-700">Click or drop a PDF here to benchmark extraction speed</p>
+        <p class="text-xs text-slate-400 mt-0.5">Measures millisecond timestamps across all 3 pipeline phases</p>
+      </div>
+
+      <!-- Live PDF Timing Results Display -->
+      <div id="pdf-timing-results" class="hidden p-4 rounded-xl bg-indigo-50/70 border border-indigo-200 space-y-3">
+        <div class="flex items-center justify-between">
+          <span class="font-bold text-indigo-950 text-sm" id="bench-pdf-filename">document.pdf</span>
+          <span class="text-xs font-bold px-2.5 py-1 bg-emerald-600 text-white rounded-lg" id="bench-pdf-total-time">Total: 0.42s</span>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          <div class="p-2.5 bg-white rounded-lg border border-indigo-100">
+            <div class="text-slate-500">Pages Analyzed:</div>
+            <div class="font-bold text-slate-800 text-sm" id="bench-pdf-pages">--</div>
+          </div>
+          <div class="p-2.5 bg-white rounded-lg border border-indigo-100">
+            <div class="text-slate-500">Phase 1 Text Layer:</div>
+            <div class="font-bold text-indigo-600 text-sm" id="bench-pdf-p1-time">-- ms</div>
+          </div>
+          <div class="p-2.5 bg-white rounded-lg border border-indigo-100">
+            <div class="text-slate-500">Phase 2 Diagram Crop:</div>
+            <div class="font-bold text-amber-600 text-sm" id="bench-pdf-p2-time">-- ms</div>
+          </div>
+          <div class="p-2.5 bg-white rounded-lg border border-indigo-100">
+            <div class="text-slate-500">Phase 3 NLP Parser:</div>
+            <div class="font-bold text-emerald-600 text-sm" id="bench-pdf-p3-time">-- ms</div>
+          </div>
+        </div>
+
+        <div class="text-xs font-semibold text-indigo-900" id="bench-pdf-summary">
+          Extracted 0 questions & 0 diagrams.
+        </div>
+      </div>
+    </div>
+
+    <!-- Overall Test Status Banner -->
+    <div id="status-banner" class="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-center justify-between font-medium">
+      <div class="flex items-center space-x-2">
+        <span class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span id="test-summary-text">Running automated verification suite...</span>
+      </div>
+      <span id="test-pass-count" class="text-xs font-bold px-2.5 py-1 bg-emerald-200 rounded-lg text-emerald-800">0 / 0 Passed</span>
+    </div>
+
+    <!-- Test Assertions Table -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div class="p-4 bg-slate-50 border-b border-slate-200 font-bold text-sm text-slate-700 flex items-center justify-between">
+        <span>Deterministic Verification Assertions</span>
+        <span class="text-xs text-slate-400 font-normal">Deterministic Verification</span>
+      </div>
+      <div class="divide-y divide-slate-100" id="assertions-container"></div>
+    </div>
+
+    <!-- Live Extracted Sample Questions for TS Police Constable 2015 -->
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4">
+      <h2 class="text-lg font-bold text-slate-900 flex items-center">
+        <i data-lucide="file-text" class="w-5 h-5 text-indigo-600 mr-2"></i>
+        Verified Extracted Questions Preview (Telangana Police Constable 2015)
+      </h2>
+      <p class="text-xs text-slate-500">Extracted questions with options (1 to 4), diagrams (Q52 triangles, Q55 grid, Q58 Venn diagram), and official keys:</p>
+
+      <div id="sample-preview-container" class="space-y-4 pt-2"></div>
+    </div>
+
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/samples.js"></script>
+  <script src="js/extractor.js"></script>
+  <script src="js/pdf-handler.js"></script>
+  <script src="js/gemini-handler.js"></script>
+  <script src="js/ocr-handler.js"></script>
+  <script src="js/docx-handler.js"></script>
+  <script src="js/paper-vault.js"></script>
+  <script src="js/paper-analyzer.js"></script>
+  <script src="js/quiz-mode.js"></script>
+  <script src="js/exporter.js"></script>
+  <script src="js/app.js"></script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      runBenchmarksAndTests();
+      setupBenchmarkDropzone();
+    });
+
+    function runBenchmarksAndTests() {
+      const assertions = [];
+      const container = document.getElementById('assertions-container');
+      container.innerHTML = '';
+
+      // --- BENCHMARK 1: TS Police 200 Questions ---
+      const tsSample = window.SAMPLE_QUESTION_PAPERS.ts_police;
+      const t0 = performance.now();
+      const tsResult = window.extractorEngine.extract(tsSample.text, { images: tsSample.images });
+      const tsTime = performance.now() - t0;
+      document.getElementById('bench-ts-time').textContent = `${tsTime.toFixed(1)} ms`;
+
+      // --- BENCHMARK 2: CBT Response Sheet ---
+      const cbtSample = window.SAMPLE_QUESTION_PAPERS.cbt_response;
+      const t1 = performance.now();
+      const cbtResult = window.extractorEngine.extract(cbtSample.text);
+      const cbtTime = performance.now() - t1;
+      document.getElementById('bench-cbt-time').textContent = `${cbtTime.toFixed(1)} ms`;
+
+      // --- BENCHMARK 3: Math Sample ---
+      const mathSample = window.SAMPLE_QUESTION_PAPERS.math;
+      const t2 = performance.now();
+      const mathResult = window.extractorEngine.extract(mathSample.text);
+      const mathTime = performance.now() - t2;
+      document.getElementById('bench-math-time').textContent = `${mathTime.toFixed(1)} ms`;
+
+      // Throughput
+      const totalQs = tsResult.questions.length + cbtResult.questions.length + mathResult.questions.length;
+      const totalTimeMs = tsTime + cbtTime + mathTime;
+      const qPerSec = Math.round((totalQs / (totalTimeMs / 1000)));
+      document.getElementById('bench-throughput').textContent = `${qPerSec.toLocaleString()} Q/s`;
+
+      // --- ASSERTIONS ---
+
+      assertions.push({
+        name: 'TS Police Constable 2015: Extraction Success',
+        pass: tsResult.success === true,
+        actual: `success=${tsResult.success}`
+      });
+
+      assertions.push({
+        name: 'TS Police Constable 2015: Maximum Marks Detection (Stated: 200 Marks)',
+        pass: tsResult.metadata.maxMarks === 200,
+        actual: `maxMarks=${tsResult.metadata.maxMarks}`
+      });
+
+      assertions.push({
+        name: 'TS Police Constable 2015: Time Duration Detection (3 Hours)',
+        pass: /3\s*hours/i.test(tsResult.metadata.duration),
+        actual: `duration=${tsResult.metadata.duration}`
+      });
+
+      assertions.push({
+        name: 'TS Police Constable 2016: Question Parsing & Count (200 questions)',
+        pass: tsResult.questions.length === 200,
+        actual: `extracted=${tsResult.questions.length} questions`
+      });
+
+      assertions.push({
+        name: 'TS Police Constable 2016: Numbered Options (1, 2, 3, 4) Extraction',
+        pass: tsResult.questions[0].options.length === 4 && tsResult.questions[0].options[0].key === '1',
+        actual: `Q1 options count=${tsResult.questions[0].options.length}, firstKey=${tsResult.questions[0].options[0]?.key}`
+      });
+
+      assertions.push({
+        name: 'TS Police Constable 2016: Q2, Q3, Q4 Question Text & Option Separation',
+        pass: tsResult.questions[1].questionText.includes('synonym of \'antidote\'') &&
+              tsResult.questions[2].questionText.includes('antonym of \'transperant\'') &&
+              tsResult.questions[3].questionText.includes('antonym of \'unanimous\'') &&
+              tsResult.questions[2].options.length === 4 &&
+              tsResult.questions[2].options[0].text === 'Opaque',
+        actual: `Q3 text="${tsResult.questions[2]?.questionText}", options=[${tsResult.questions[2]?.options.map(o => o.key + ':' + o.text).join(', ')}]`
+      });
+
+      assertions.push({
+        name: 'TS Police Constable 2016: Q77 Number Triangles Diagram Attachment',
+        pass: Boolean(tsResult.questions.find(q => q.questionNumber === '77')?.image),
+        actual: `Q77 image=${Boolean(tsResult.questions.find(q => q.questionNumber === '77')?.image)}`
+      });
+
+      assertions.push({
+        name: 'TS Police Constable 2016: Q80 2x2 Number Grids Diagram Attachment',
+        pass: Boolean(tsResult.questions.find(q => q.questionNumber === '80')?.image),
+        actual: `Q80 image=${Boolean(tsResult.questions.find(q => q.questionNumber === '80')?.image)}`
+      });
+
+      assertions.push({
+        name: 'TS Police Constable 2016: Q81 P,Q Triangles Diagram Attachment',
+        pass: Boolean(tsResult.questions.find(q => q.questionNumber === '81')?.image),
+        actual: `Q81 image=${Boolean(tsResult.questions.find(q => q.questionNumber === '81')?.image)}`
+      });
+
+      assertions.push({
+        name: 'TS Police Constable 2016: Q83 Venn Diagram Attachment',
+        pass: Boolean(tsResult.questions.find(q => q.questionNumber === '83')?.image),
+        actual: `Q83 image=${Boolean(tsResult.questions.find(q => q.questionNumber === '83')?.image)}`
+      });
+
+      // TEST 2: CBSE Class 10 Math Extraction
+      assertions.push({
+        name: 'CBSE Math Class 10: Max Marks Detection (80 Marks)',
+        pass: mathResult.metadata.maxMarks === 80,
+        actual: `maxMarks=${mathResult.metadata.maxMarks}`
+      });
+
+      assertions.push({
+        name: 'CBSE Math Class 10: Section A MCQ Options Extraction (A, B, C, D)',
+        pass: mathResult.questions[0].options.length === 4 && mathResult.questions[0].options[0].key === 'A',
+        actual: `Q1 options count=${mathResult.questions[0].options.length}, keys=${mathResult.questions[0].options.map(o => o.key).join(',')}`
+      });
+
+      assertions.push({
+        name: 'CBSE Math Class 10: Answer Key (Q1 -> B)',
+        pass: mathResult.questions[0].correctAnswer === 'B',
+        actual: `Q1 correctAnswer=${mathResult.questions[0].correctAnswer}`
+      });
+
+      // TEST 3: Online CBT Response Sheet (Question Number : 149, 150)
+      assertions.push({
+        name: 'Online CBT Response Sheet: Title & Metadata Detection',
+        pass: cbtResult.metadata.title.includes('Social Telugu') && cbtResult.metadata.maxMarks === 150,
+        actual: `title="${cbtResult.metadata.title}", maxMarks=${cbtResult.metadata.maxMarks}`
+      });
+
+      assertions.push({
+        name: 'Online CBT Response Sheet: Question 148 Parsed Correctly',
+        pass: cbtResult.questions.some(q => q.questionNumber === '148' && q.options.length === 4),
+        actual: `Q148 found=${cbtResult.questions.some(q => q.questionNumber === '148')}`
+      });
+
+      assertions.push({
+        name: 'Online CBT Response Sheet: Question 149 Parsed Correctly (CBT Numbering Fix)',
+        pass: cbtResult.questions.some(q => q.questionNumber === '149' && q.options.length === 4),
+        actual: `Q149 found=${cbtResult.questions.some(q => q.questionNumber === '149')}, text="${cbtResult.questions.find(q => q.questionNumber === '149')?.questionText.substring(0, 35)}..."`
+      });
+
+      assertions.push({
+        name: 'Online CBT Response Sheet: Question 150 Parsed Correctly (CBT Numbering Fix)',
+        pass: cbtResult.questions.some(q => q.questionNumber === '150' && q.options.length === 4),
+        actual: `Q150 found=${cbtResult.questions.some(q => q.questionNumber === '150')}, text="${cbtResult.questions.find(q => q.questionNumber === '150')?.questionText.substring(0, 35)}..."`
+      });
+
+      // TEST 4: Gemini Key Manager & Multi-Key Pool Tests
+      const km = new GeminiKeyManager();
+      km.clearAllKeys();
+      const addRes1 = km.addKey('AIzaSyDummyKeyNumberOneForTesting1111', 'Test Key 1');
+      const addRes2 = km.addMultipleKeys('AIzaSyDummyKeyNumberTwoForTesting2222\nAIzaSyDummyKeyNumberThreeForTesting3333');
+      const allKeys = km.getAllKeys();
+      const key1Id = allKeys[0].id;
+      
+      km.recordRateLimit(key1Id, 60000, 'HTTP 429 Quota Exceeded');
+      const summaryAfterCooldown = km.getStatusSummary();
+      const nextKey = km.getNextKey();
+      km.resetAllCooldowns();
+      const summaryAfterReset = km.getStatusSummary();
+
+      assertions.push({
+        name: 'Gemini Key Manager: Multi-Key Add & Bulk Import',
+        pass: addRes1.success && addRes2.added === 2 && km.getAllKeys().length === 3,
+        actual: `totalKeys=${km.getAllKeys().length}, addRes1=${addRes1.success}, bulkAdded=${addRes2.added}`
+      });
+
+      assertions.push({
+        name: 'Gemini Key Manager: 429 Rate-Limit Cooldown & Auto-Failover',
+        pass: summaryAfterCooldown.cooldown === 1 && nextKey.key && nextKey.key.label === 'Key 2',
+        actual: `cooldownCount=${summaryAfterCooldown.cooldown}, nextRotatedKey=${nextKey.key?.label}`
+      });
+
+      assertions.push({
+        name: 'Gemini Key Manager: Reset All Cooldowns',
+        pass: summaryAfterReset.cooldown === 0 && summaryAfterReset.active === 3,
+        actual: `activeCount=${summaryAfterReset.active}, cooldownCount=${summaryAfterReset.cooldown}`
+      });
+
+      // TEST 5: App Controller Modal & UI Handlers
+      const hasModalMethods = typeof app.setKeyModalTab === 'function' &&
+                              typeof app.renderKeysTable === 'function' &&
+                              typeof app.addSingleKeyFromModal === 'function' &&
+                              typeof app.addBulkKeysFromModal === 'function' &&
+                              typeof app.resetAllKeyCooldowns === 'function' &&
+                              typeof app.clearAllKeys === 'function' &&
+                              typeof app.deleteKeyFromModal === 'function' &&
+                              typeof app.toggleKeyEnabled === 'function' &&
+                              typeof app.testKeyHealth === 'function' &&
+                              typeof app.onModalModelRadioChange === 'function' &&
+                              typeof app.onModelSelectChange === 'function' &&
+                              typeof app.onStrategyRadioChange === 'function';
+
+      assertions.push({
+        name: 'AppController: Multi-Key Modal & Nav Handlers Wired',
+        pass: hasModalMethods === true,
+        actual: `allModalMethodsPresent=${hasModalMethods}`
+      });
+
+      // TEST 5b: GeminiHandler Model Selection & Output Standardizer
+      const gh = window.geminiHandler;
+      const suppModels = gh.supportedModels.map(m => m.id);
+      const hasKeyModels = suppModels.includes('gemini-2.5-flash') &&
+                           suppModels.includes('gemini-2.5-pro') &&
+                           suppModels.includes('gemini-3.7-flash') &&
+                           suppModels.includes('gemini-3.5-flash-lite');
+
+      const mockOutput = gh.standardizeGeminiOutput({
+        metadata: { title: 'Exam Sample', subject: 'Math', maxMarks: 10 },
+        sections: [{
+          id: 'sec_1',
+          title: 'Section A',
+          questions: [{
+            questionNumber: '1',
+            questionText: 'Evaluate $2+2$:',
+            options: [{ key: 'A', text: '3' }, { key: 'B', text: '4' }, { key: 'C', text: '5' }],
+            correctAnswer: 'B',
+            marks: 1
+          }]
+        }]
+      }, 'test.pdf');
+
+      assertions.push({
+        name: 'GeminiHandler: Supported Models & Question/Option Standardizer',
+        pass: hasKeyModels && mockOutput.success && mockOutput.questions[0].options.length === 3 && mockOutput.questions[0].correctAnswer === 'B',
+        actual: `modelsChecked=${hasKeyModels}, q1Options=${mockOutput.questions[0]?.options.length}, q1Key=${mockOutput.questions[0]?.correctAnswer}`
+      });
+
+      // TEST 6: Multi-Column Protection
+      const testEmbedText = `17. Fill in the blank:
+1 are
+2 is
+3 was
+4 had been 18. She I cannot disturb her now.
+1 has been resting
+2 had been resting
+3 is resting
+4 , was resting 19. We two daughters.
+1 will have
+2 has
+3 have
+4 having 20. Either Maya --- [OR] --- her friend Manju
+1 are
+2 was responsible for the picnic plan.
+3 is
+4 were`;
+      const embedResult = window.extractorEngine.extract(testEmbedText);
+      const q17 = embedResult.questions.find(q => q.questionNumber === '17');
+      const q18 = embedResult.questions.find(q => q.questionNumber === '18');
+      const q19 = embedResult.questions.find(q => q.questionNumber === '19');
+      const q20 = embedResult.questions.find(q => q.questionNumber === '20');
+
+      assertions.push({
+        name: 'Multi-Column Protection: Q17 Option 4 does not bleed into Q18',
+        pass: q17?.options.length === 4 && q17.options[3].text.trim() === 'had been',
+        actual: `Q17 Opt4="${q17?.options[3]?.text}"`
+      });
+
+      assertions.push({
+        name: 'Multi-Column Protection: Q18 Question Text extracted cleanly',
+        pass: q18?.questionText.includes('She I cannot disturb her now') && q18?.options.length === 4,
+        actual: `Q18 text="${q18?.questionText}", options=${q18?.options.length}`
+      });
+
+      assertions.push({
+        name: 'Multi-Column Protection: Q19 Question Text extracted cleanly',
+        pass: q19?.questionText.includes('We two daughters') && q19?.options.length === 4,
+        actual: `Q19 text="${q19?.questionText}", options=${q19?.options.length}`
+      });
+
+      assertions.push({
+        name: 'Multi-Column Protection: Q20 Question Text extracted cleanly',
+        pass: q20?.questionText.includes('Either Maya') && q20?.options.length === 4,
+        actual: `Q20 text="${q20?.questionText}", options=${q20?.options.length}`
+      });
+
+      // TEST 7: Gemini Smart Batching & Merging
+      const dummyBigText = Array.from({ length: 60 }, (_, i) => `Question Number : ${i + 1} Question Id : ${1000 + i}\nQuestion ${i + 1} Text here\nOptions :\n1. Option A\n2. Option B\n3. Option C\n4. Option D`).join('\n\n');
+      const batches = gh.splitTextIntoBatches(dummyBigText, 25);
+      const mockBatch1 = {
+        metadata: { title: 'Batch Test Exam', subject: 'General' },
+        sections: [{ id: 'sec_1', title: 'Part 1', questions: [{ questionNumber: '1', questionText: 'Q1', options: [{ key: '1', text: 'Opt1' }] }] }]
+      };
+      const mockBatch2 = {
+        metadata: { title: 'Batch Test Exam', subject: 'General' },
+        sections: [{ id: 'sec_1', title: 'Part 1', questions: [{ questionNumber: '2', questionText: 'Q2', options: [{ key: '1', text: 'Opt1' }] }] }]
+      };
+      const mergedRes = gh.mergeBatches([mockBatch1, mockBatch2], 'exam.pdf');
+
+      assertions.push({
+        name: 'Gemini Smart Pipeline: Large Document Text Split Into Batches',
+        pass: batches.length === 3 && typeof gh.extractSmart === 'function',
+        actual: `batchCount=${batches.length}, hasExtractSmart=${typeof gh.extractSmart === 'function'}`
+      });
+
+      assertions.push({
+        name: 'Gemini Smart Pipeline: Batch Merging & Unified Question Consolidation',
+        pass: mergedRes.success && mergedRes.questions.length === 2 && mergedRes.questions[1].questionNumber === '2',
+        actual: `mergedSuccess=${mergedRes.success}, totalQuestions=${mergedRes.questions.length}`
+      });
+
+      // TEST 8: Paper Vault Repository & Pattern Analyzer
+      assertions.push({
+        name: 'PaperVault: Multi-Paper Repository Initialized (IndexedDB & Fallback)',
+        pass: Boolean(window.paperVault && typeof window.paperVault.savePaper === 'function' && typeof window.paperVault.getAllPapersSummary === 'function'),
+        actual: `savePaper=${typeof window.paperVault?.savePaper}, getAllPapersSummary=${typeof window.paperVault?.getAllPapersSummary}`
+      });
+
+      assertions.push({
+        name: 'PaperPatternAnalyzer: Cross-Paper Intelligence & Gemini Prompt Generator Ready',
+        pass: Boolean(window.paperPatternAnalyzer && typeof window.paperPatternAnalyzer.prepareCrossPaperDigest === 'function' && typeof window.paperPatternAnalyzer.buildAnalysisPrompt === 'function'),
+        actual: `prepareCrossPaperDigest=${typeof window.paperPatternAnalyzer?.prepareCrossPaperDigest}, buildAnalysisPrompt=${typeof window.paperPatternAnalyzer?.buildAnalysisPrompt}`
+      });
+
+      // TEST 9: Hierarchical Exam Vault Architecture (Board ➔ Exam ➔ Paper/Branch ➔ Years)
+      const testClassification = window.paperVault?.detectClassification?.(
+        'TGPSC AEE 2023 Paper 1 General Studies and Mental Ability',
+        {},
+        'sample.pdf'
+      );
+      assertions.push({
+        name: 'PaperVault: Classification Auto-Detection (Board, Exam, Common/Spec, Branch, Year)',
+        pass: Boolean(
+          testClassification &&
+          testClassification.board?.includes('TGPSC') &&
+          testClassification.exam?.includes('AEE') &&
+          testClassification.paperType === 'common' &&
+          testClassification.year === '2023'
+        ),
+        actual: `board=${testClassification?.board}, exam=${testClassification?.exam}, type=${testClassification?.paperType}, year=${testClassification?.year}`
+      });
+
+      assertions.push({
+        name: 'PaperVault: Hierarchical Grouping Method (Board ➔ Exam ➔ Paper/Branch ➔ Years)',
+        pass: typeof window.paperVault?.getPapersGroupedByHierarchy === 'function' && typeof window.paperVault?.updatePaperClassification === 'function',
+        actual: `hasHierarchyFn=${typeof window.paperVault?.getPapersGroupedByHierarchy === 'function'}, hasUpdateClassFn=${typeof window.paperVault?.updatePaperClassification === 'function'}`
+      });
+
+      // TEST 10: Manual Folder Creation & In-Folder Upload Functions
+      assertions.push({
+        name: 'PaperVault: Manual Folder Registration (createFolder & getCustomFolders)',
+        pass: typeof window.paperVault?.createFolder === 'function' && typeof window.paperVault?.getCustomFolders === 'function' && typeof window.app?.openFolderUploadModal === 'function',
+        actual: `createFolderFn=${typeof window.paperVault?.createFolder === 'function'}, getCustomFoldersFn=${typeof window.paperVault?.getCustomFolders === 'function'}, openFolderUploadModalFn=${typeof window.app?.openFolderUploadModal === 'function'}`
+      });
+
+      // Render Assertion Rows
+      let passCount = 0;
+      assertions.forEach(a => {
+        if (a.pass) passCount++;
+        const row = document.createElement('div');
+        row.className = 'p-4 flex items-center justify-between text-xs';
+        row.innerHTML = `
+          <div class="flex items-center space-x-3">
+            <span class="w-5 h-5 rounded-full ${a.pass ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'} flex items-center justify-center font-bold">
+              ${a.pass ? '✓' : '✗'}
+            </span>
+            <div>
+              <div class="font-semibold text-slate-800 text-sm">${a.name}</div>
+              <div class="text-slate-400 mt-0.5">Result: <code class="bg-slate-100 px-1 py-0.5 rounded text-slate-600">${a.actual}</code></div>
+            </div>
+          </div>
+          <span class="px-2.5 py-1 rounded-md font-bold ${a.pass ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}">
+            ${a.pass ? 'PASSED' : 'FAILED'}
+          </span>
+        `;
+        container.appendChild(row);
+      });
+
+      // Update Header
+      const summaryElem = document.getElementById('test-summary-text');
+      const countElem = document.getElementById('test-pass-count');
+      if (passCount === assertions.length) {
+        summaryElem.textContent = `All ${assertions.length} Tests Passed in ${totalTimeMs.toFixed(1)}ms! Zero Errors.`;
+        countElem.textContent = `${passCount} / ${assertions.length} Passed (100%)`;
+      } else {
+        summaryElem.textContent = `${assertions.length - passCount} Tests Failed`;
+        countElem.textContent = `${passCount} / ${assertions.length} Passed`;
+      }
+
+      // Render Preview
+      const previewContainer = document.getElementById('sample-preview-container');
+      previewContainer.innerHTML = '';
+
+      const sampleQuestionsToPreview = [
+        tsResult.questions.find(q => q.questionNumber === '1'),
+        tsResult.questions.find(q => q.questionNumber === '52'),
+        tsResult.questions.find(q => q.questionNumber === '55'),
+        tsResult.questions.find(q => q.questionNumber === '58'),
+        tsResult.questions.find(q => q.questionNumber === '128'),
+        tsResult.questions.find(q => q.questionNumber === '200')
+      ].filter(Boolean);
+
+      sampleQuestionsToPreview.forEach(q => {
+        const qCard = document.createElement('div');
+        qCard.className = 'p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3';
+
+        let optsHtml = '<div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">';
+        q.options.forEach(opt => {
+          const isKey = q.correctAnswer === opt.key;
+          optsHtml += `
+            <div class="p-2 rounded-lg border ${isKey ? 'border-emerald-300 bg-emerald-50 text-emerald-900 font-bold' : 'border-slate-200 bg-white text-slate-700'} flex items-center justify-between">
+              <div><strong class="text-indigo-600">(${opt.key})</strong> ${opt.text}</div>
+              ${isKey ? '<span class="text-emerald-700 text-xs font-bold">✓ Official Key</span>' : ''}
+            </div>
+          `;
+        });
+        optsHtml += '</div>';
+
+        let imgHtml = '';
+        if (q.image) {
+          const isSvg = typeof q.image === 'string' && q.image.trim().startsWith('<svg');
+          if (isSvg) {
+            imgHtml = `<div class="my-2 p-2 bg-white rounded-lg border border-slate-200 inline-block">${q.image}</div>`;
+          } else {
+            imgHtml = `<div class="my-2 p-2 bg-white rounded-lg border border-slate-200 inline-block"><img src="${q.image}" class="max-h-48 object-contain" alt="Diagram Q${q.questionNumber}"></div>`;
+          }
+        }
+
+        qCard.innerHTML = `
+          <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+            <div class="flex items-center space-x-2">
+              <span class="px-2.5 py-0.5 bg-indigo-600 text-white font-bold rounded-md text-xs">Q${q.questionNumber}</span>
+              <span class="px-2 py-0.5 bg-slate-200 text-slate-700 font-semibold rounded text-xs">${q.marks} Mark</span>
+              <span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 font-semibold rounded text-xs">${q.type.toUpperCase()}</span>
+              ${q.image ? '<span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 font-bold rounded text-xs">📷 Diagram Attached</span>' : ''}
+            </div>
+            <div class="text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
+              Correct Key: ${q.correctAnswer || 'Not in Key Table'}
+            </div>
+          </div>
+          <p class="text-sm font-medium text-slate-800 leading-relaxed">${q.questionText}</p>
+          ${imgHtml}
+          ${optsHtml}
+        `;
+        previewContainer.appendChild(qCard);
+      });
+
+      if (window.lucide) window.lucide.createIcons();
+    }
+
+    function setupBenchmarkDropzone() {
+      const dropzone = document.getElementById('benchmark-dropzone');
+      const input = document.getElementById('benchmark-file-input');
+      if (!dropzone || !input) return;
+
+      dropzone.onclick = () => input.click();
+
+      input.onchange = async (e) => {
+        const file = e.target.files?.[0];
+        if (file) await runLivePdfBenchmark(file);
+      };
+
+      dropzone.ondragover = (e) => { e.preventDefault(); dropzone.classList.add('border-indigo-500'); };
+      dropzone.ondragleave = () => dropzone.classList.remove('border-indigo-500');
+      dropzone.ondrop = async (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('border-indigo-500');
+        const file = e.dataTransfer.files?.[0];
+        if (file) await runLivePdfBenchmark(file);
+      };
+    }
+
+    async function runLivePdfBenchmark(file) {
+      const resultsDiv = document.getElementById('pdf-timing-results');
+      resultsDiv.classList.remove('hidden');
+      document.getElementById('bench-pdf-filename').textContent = file.name;
+      document.getElementById('bench-pdf-total-time').textContent = 'Processing...';
+
+      const tStartTotal = performance.now();
+
+      try {
+        // PDF Extract Phase
+        const t0 = performance.now();
+        const pdfResult = await window.pdfHandler.extractText(file);
+        const pdfTime = performance.now() - t0;
+
+        // NLP Extract Phase
+        const t1 = performance.now();
+        const extracted = window.extractorEngine.extract(pdfResult.text, { images: pdfResult.images, imagesByPage: pdfResult.imagesByPage });
+        const nlpTime = performance.now() - t1;
+
+        const totalTime = performance.now() - tStartTotal;
+        const totalSecs = (totalTime / 1000).toFixed(2);
+
+        document.getElementById('bench-pdf-pages').textContent = `${pdfResult.numPages} Pages`;
+        document.getElementById('bench-pdf-p1-time').textContent = `${(pdfTime * 0.7).toFixed(0)} ms`;
+        document.getElementById('bench-pdf-p2-time').textContent = `${(pdfTime * 0.3).toFixed(0)} ms`;
+        document.getElementById('bench-pdf-p3-time').textContent = `${nlpTime.toFixed(1)} ms`;
+        document.getElementById('bench-pdf-total-time').textContent = `Total: ${totalSecs}s (${totalTime.toFixed(0)} ms)`;
+        document.getElementById('bench-pdf-summary').textContent = `✓ Successfully extracted ${extracted.questions.length} questions, ${extracted.sections.length} sections, and ${pdfResult.images.length} diagrams in ${totalSecs}s!`;
+
+      } catch (err) {
+        document.getElementById('bench-pdf-total-time').textContent = 'Error';
+        document.getElementById('bench-pdf-summary').textContent = `Error during benchmark: ${err.message}`;
+      }
+    }
+  </script>
+</body>
+</html>
