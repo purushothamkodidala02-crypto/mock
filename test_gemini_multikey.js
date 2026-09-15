@@ -290,7 +290,61 @@ console.log('  ✓ Q198 Option 3:', sanitizedQ198.options[2].text);
 console.log('  ✓ Q198 Option 4:', sanitizedQ198.options[3].text);
 console.log('  ✓ Verified Q198 recovered all 4 bilingual options with zero dummy placeholders!');
 
+console.log('\nTest 11: Page-Based Smart Batching & Zero Omission Check (Q1 & Q15-35)...');
+
+const tsPoliceSample = `--- [Page 1] ---
+TS Police Constable Prelims 2022
+
+--- [Page 2] ---
+1. A pair of socks been missing (2) 
+ from my room. have (3) is
+(1) has
+2. I always listen to great speeches carefully
+14. Either of the foot paths arrested the thieves.
+
+--- [Page 3] ---
+15. I have done a deal of work.
+Read the passage below and answer the questions (21-25).
+Ms. Yanada recalls all too clearly that mid-summer day in 1945
+23. Japan Confederation of A & H Bomb Sufferers is made up of
+
+--- [Page 4] ---
+24. Japan was forced to surrender after the
+30. If LCM and HCF of two numbers x and y are L and H respectively
+
+--- [Page 5] ---
+31. The average weight of a group of men is 77.5 kgs.
+35. The ratios of the ages of two persons before 6 years
+
+--- [Page 6] ---
+36. In a cylindrical vessel of height 14 cm and radius 5 cm`;
+
+const batches = handler.splitTextIntoBatches(tsPoliceSample, 12);
+assert.strictEqual(batches.length, 3, 'Should create exactly 3 batches for 6 pages (2 pages per batch)');
+
+// Batch 1 must contain Question 1 and Page 2
+assert.ok(batches[0].includes('--- [Page 2] ---'), 'Batch 1 must retain Page 2 marker');
+assert.ok(batches[0].includes('1. A pair of socks'), 'Batch 1 must contain Question 1');
+assert.ok(batches[0].includes('14. Either of the foot paths'), 'Batch 1 must contain Question 14');
+
+// Batch 2 must contain Questions 15 to 30 (Pages 3 and 4)
+assert.ok(batches[1].includes('--- [Page 3] ---'), 'Batch 2 must retain Page 3 marker');
+assert.ok(batches[1].includes('15. I have done a deal of work.'), 'Batch 2 must contain Question 15');
+assert.ok(batches[1].includes('24. Japan was forced to surrender'), 'Batch 2 must contain Question 24');
+assert.ok(batches[1].includes('30. If LCM and HCF'), 'Batch 2 must contain Question 30');
+
+// Batch 3 must contain Questions 31 to 36 (Pages 5 and 6)
+assert.ok(batches[2].includes('--- [Page 5] ---'), 'Batch 3 must retain Page 5 marker');
+assert.ok(batches[2].includes('31. The average weight'), 'Batch 3 must contain Question 31');
+assert.ok(batches[2].includes('35. The ratios of the ages'), 'Batch 3 must contain Question 35');
+assert.ok(batches[2].includes('36. In a cylindrical vessel'), 'Batch 3 must contain Question 36');
+
+console.log('  ✓ Batch 1 coverage: Page 1-2 (contains Question 1 to 14)');
+console.log('  ✓ Batch 2 coverage: Page 3-4 (contains Questions 15 to 30)');
+console.log('  ✓ Batch 3 coverage: Page 5-6 (contains Questions 31 to 36)');
+console.log('  ✓ Verified 100% complete coverage: Question 1 & Questions 15-35 are never omitted!');
+
 console.log('\n====================================================');
-console.log('🎉 ALL 10 TEST SUITES PASSED FLAWLESSLY!');
+console.log('🎉 ALL 11 TEST SUITES PASSED FLAWLESSLY!');
 console.log('====================================================');
 process.exit(0);

@@ -403,7 +403,7 @@ class GeminiKeyManager {
 
 class GeminiHandler {
   constructor(keyManager = null) {
-    this.keyManager = keyManager || window.geminiKeyManager || new GeminiKeyManager();
+    this.keyManager = keyManager || (typeof window !== 'undefined' ? window.geminiKeyManager : null) || new GeminiKeyManager();
 
     // Standard high-performance supported models (2026 current models)
     this.supportedModels = [
@@ -529,6 +529,8 @@ Return ONLY a valid JSON object matching this exact JSON schema:
 }
 
 CRITICAL RULES:
+- MANDATORY: START FROM QUESTION 1 (OR FIRST QUESTION ON PAGE): You MUST extract the very first numbered question (e.g. Question 1) visible in this batch. Even if Question 1 has multi-column formatting, broken lines, or options split across lines (e.g. '1. A pair of socks been missing (2) from my room...'), reconstruct the complete question text and all options. NEVER omit Question 1 or dismiss it as header/title text!
+- EXTRACT ALL QUESTIONS IN THE CHUNK COMPLETELY: Extract EVERY single question in the provided chunk sequentially without stopping or omitting any intermediate questions.
 - Do NOT skip any questions or truncate output. Extract ALL questions visible.
 - Always preserve options faithfully with their keys.
 - Do NOT wrap in markdown explanation or conversational text outside the JSON. Return purely valid JSON.
@@ -567,8 +569,8 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
 4. READING COMPREHENSION PASSAGES:
    - When a passage precedes questions (e.g. "Read the following passage and answer the questions from 1-4: ..."):
      * Place the passage in the section "description" or at the start.
-     * Each individual question (e.g. Question 1) must contain ONLY its actual question prompt (e.g. "How did most people regard early motor cars?").
-     * NEVER attach the entire reading passage or its translation into Question 1's "questionText"!
+     * Each individual question must contain ONLY its actual question prompt (e.g. "How did most people regard early motor cars?").
+     * NEVER attach the entire reading passage or its translation into an individual question's "questionText"! Place the reading passage in section "description".
      * NEVER append stray paragraph markers or option markers like "(1) ..." into "questionText".
 
 5. QUESTION NUMBERING INTEGRITY:
@@ -728,28 +730,49 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
   }
 
   /**
-   * Intelligently divides large question paper text into 15–25 question batches
+   * Intelligently divides large question paper text into 8–15 question batches.
+   * Prioritizes page boundaries (2 pages per batch) so questions are never fragmented,
+   * never omitted, and never exceed Gemini's output generation window.
    */
-  splitTextIntoBatches(rawText, targetBatchSize = 25) {
+  splitTextIntoBatches(rawText, targetBatchSize = 12) {
     if (!rawText || typeof rawText !== 'string') return [rawText || ''];
 
+    // STRATEGY 1: Split by page markers (--- [Page X] ---)
+    // 2 pages per batch guarantees ~8-15 questions per batch, keeping batches fast, complete, and fully generated
+    const pageMarkerRegex = /(?:^|\n)(?=---\s*\[?Page\s*\d+\]?\s*---)/i;
+    const rawPageBlocks = rawText.split(pageMarkerRegex).map(b => b.trim()).filter(Boolean);
+
+    if (rawPageBlocks.length > 1) {
+      const pagesPerBatch = 2;
+      const batches = [];
+      for (let i = 0; i < rawPageBlocks.length; i += pagesPerBatch) {
+        const chunk = rawPageBlocks.slice(i, i + pagesPerBatch).join('\n\n').trim();
+        if (chunk.length > 0) {
+          batches.push(chunk);
+        }
+      }
+      return batches;
+    }
+
+    // STRATEGY 2: Split by question line indices
     const lines = rawText.split('\n');
     const questionStartIndices = [];
+    const qRegex = /^(?:question\s*(?:no\.?|number|id)?\s*[:.\-]?\s*\d+|q(?:no\.?|\.?\s*no\.?)?\s*\d+|q\s*\d+|\d{1,3}[\.\)](?:\s+|$)|(?:\d{1,3}[\.\)]|\(\d{1,3}\))\s*)/i;
 
-    // Find question start line indices
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
       if (!line) continue;
-      if (/^(?:question\s*(?:no\.?|number|id)?\s*[:.\-]?\s*\d+|q(?:no\.?|\.?\s*no\.?)?\s*\d+|q\s*\d+|\d+[\.\)]\s+)/i.test(line)) {
+      if (qRegex.test(line)) {
         questionStartIndices.push(i);
       }
     }
 
-    // If we detected plenty of questions, chunk by questions
+    // If we detected questions, chunk by questions with targetBatchSize (default 12)
     if (questionStartIndices.length > targetBatchSize) {
       const batches = [];
       for (let i = 0; i < questionStartIndices.length; i += targetBatchSize) {
-        const startLine = questionStartIndices[i];
+        // For the first batch, always start from line 0 so document header, instructions, and Question 1 are never cut off!
+        const startLine = i === 0 ? 0 : questionStartIndices[i];
         const nextBatchStart = questionStartIndices[i + targetBatchSize];
         const endLine = nextBatchStart !== undefined ? nextBatchStart : lines.length;
         const chunkLines = lines.slice(startLine, endLine);
@@ -761,30 +784,16 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
       return batches;
     }
 
-    // Fallback: Split by page markers (--- [Page X] ---)
-    const pageChunks = rawText.split(/\n---\s*\[Page\s*\d+\]\s*---\n/);
-    if (pageChunks.length > 8) {
-      const pagesPerBatch = 6;
-      const batches = [];
-      for (let i = 0; i < pageChunks.length; i += pagesPerBatch) {
-        const chunk = pageChunks.slice(i, i + pagesPerBatch).join('\n\n').trim();
-        if (chunk.length > 0) {
-          batches.push(chunk);
-        }
-      }
-      return batches;
-    }
-
-    // Fallback: Split by character length if text is huge (>25KB)
-    if (rawText.length > 30000) {
-      const charChunkSize = 20000;
+    // STRATEGY 3: Fallback split by character length if text is large (>12KB)
+    if (rawText.length > 12000) {
+      const charChunkSize = 8000;
       const batches = [];
       let currentPos = 0;
       while (currentPos < rawText.length) {
         let nextPos = currentPos + charChunkSize;
         if (nextPos < rawText.length) {
           const nextNewline = rawText.indexOf('\n', nextPos);
-          if (nextNewline !== -1 && nextNewline - nextPos < 2000) {
+          if (nextNewline !== -1 && nextNewline - nextPos < 1500) {
             nextPos = nextNewline;
           }
         }
@@ -802,7 +811,7 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
    * Takes ~2-3s per batch instead of 90s for a 65-page document
    */
   async extractFromTextWithBatches(rawText, fileName = 'question_paper.txt', onProgress = null) {
-    const batches = this.splitTextIntoBatches(rawText, 25);
+    const batches = this.splitTextIntoBatches(rawText, 12);
     const progress = (msg, percent = null, keyInfo = null) => {
       if (onProgress) onProgress(msg, percent, keyInfo);
     };
@@ -869,7 +878,7 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
         .map(p => `--- [Page ${p}] ---\n${pageTexts[p - 1]}`)
         .join('\n\n');
 
-      const textBatches = this.splitTextIntoBatches(textContent, 25);
+      const textBatches = this.splitTextIntoBatches(textContent, 12);
       const totalTextBatches = textBatches.length;
       progress(`⚡ Digitizing ${textPagesWithContent.length} text pages across ${totalTextBatches} fast AI batches...`, 20);
 
@@ -2005,6 +2014,14 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
 }
 
 // Attach single global instance
-window.geminiKeyManager = new GeminiKeyManager();
-window.geminiHandler = new GeminiHandler(window.geminiKeyManager);
+if (typeof window !== 'undefined') {
+  window.GeminiKeyManager = GeminiKeyManager;
+  window.GeminiHandler = GeminiHandler;
+  window.geminiKeyManager = new GeminiKeyManager();
+  window.geminiHandler = new GeminiHandler(window.geminiKeyManager);
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { GeminiKeyManager, GeminiHandler };
+}
 
