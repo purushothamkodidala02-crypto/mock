@@ -534,11 +534,22 @@ CRITICAL RULES:
 - Do NOT wrap in markdown explanation or conversational text outside the JSON. Return purely valid JSON.
 
 SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
-1. STATEMENT-BASED QUESTIONS (e.g. "Consider the following statements: a) ... b) ... c) ... Choose the correct statements: (1) a & c (2) a & b (3) b & c (4) a, b & c"):
-   - Statements a), b), c) or I, II, III belong ENTIRELY inside "questionText", NOT in "options"!
-   - DO NOT extract statements as options A, B, C!
-   - The "options" array must strictly contain ONLY the final selectable choices, e.g. [{"key":"1","text":"a & c"}, {"key":"2","text":"a & b"}, ...].
-   - There must be ONLY 4 options (never 7 or 8 options!).
+1. DISTINGUISH STANDARD STATEMENT MCQs vs COMBO-CHOICE QUESTIONS:
+   (A) STANDARD STATEMENT MCQs (e.g. "Which of the following statements is not correct about reign of Akbar? (1) Raja Todarmal... (2) Raja Birbal... (3) Raja Mansingh... (4) Promoulgation..."):
+       - Here the 4 numbered statements (1), (2), (3), (4) ARE THE 4 MULTIPLE CHOICE OPTIONS THEMSELVES!
+       - Extract each full statement (and its Telugu/regional translation if bilingual) as the option text:
+         [
+           {"key": "1", "text": "Raja Todarmal, a Rajput noble... / రాజ్యపుత్రుడు అయిన తోడర్మల్..."},
+           {"key": "2", "text": "Raja Birbal, a Brahmin... / బ్రాహ్మణుడైన బీర్బల్..."},
+           {"key": "3", "text": "Raja Mansingh, brother-in-law... / అక్బర్ తన బావమరిది..."},
+           {"key": "4", "text": "Promoulgation of a new religious philosophy... / 1582 లో ‘దీన్-ఇ-ఇలాహి’..."}
+         ]
+       - NEVER return dummy digits like [{"key":"1","text":"1"}, {"key":"2","text":"2"}, ...]!
+       - Place both English and Telugu question stems in "questionText":
+         "Which of the following statements is not correct about reign of Akbar? / అక్బర్ కాలానికి సంబంధించి ఈ క్రింది వాఖ్యములలో ఏది సరిఅయింది కాదు ?"
+   (B) COMBO-CHOICE QUESTIONS (e.g. "Consider the following statements: (a) ... (b) ... (c) ... Which of the statements are correct? (1) a & c (2) a & b (3) b & c (4) a, b & c"):
+       - Only when secondary combination choices (1) a & c, (2) a & b exist do the sub-statements (a), (b), (c) go inside "questionText".
+       - The "options" array must contain ONLY the 4 final combination choices [{"key":"1","text":"a & c"}, ...].
 
 2. MATCH THE FOLLOWING QUESTIONS (e.g. "Match the following: Minister vs Union Government (a) ... (b) ... (i) ... (ii) ... Options: (1) a-ii, b-iv..."):
    - The column/table matching items belong ENTIRELY inside "questionText" (e.g. formatted with clean newlines or table).
@@ -1853,7 +1864,88 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
       }
     }
 
-    // 2. Disambiguate statement and match table rows mistakenly put in options
+    // 2. DUMMY OPTIONS RECOVERY (e.g. Q198 where options were output as [{"key":"1","text":"1"}, ...] while statements were in questionText)
+    const isDummyOptions = Array.isArray(q.options) && q.options.length >= 2 &&
+      q.options.every(opt => {
+        const t = String(opt.text || '').trim();
+        const k = String(opt.key || '').trim();
+        return t === k || /^[1-4]$/.test(t) || t.length === 0;
+      });
+
+    if (isDummyOptions && q.questionText) {
+      // Look for (1) ... (2) ... (3) ... (4) inside q.questionText
+      const optionPattern = /(?:^|\n|\s+)\(([1-4])\)\s+([\s\S]*?)(?=(?:\n|\s+)\([1-4]\)|$)/g;
+      const matches = [];
+      let m;
+      while ((m = optionPattern.exec(q.questionText)) !== null) {
+        matches.push({ key: m[1], text: m[2].trim() });
+      }
+
+      if (matches.length >= 4) {
+        const byKey = { '1': [], '2': [], '3': [], '4': [] };
+        const extractedRegionalStems = [];
+
+        matches.forEach(item => {
+          let optText = item.text;
+          const subLines = optText.split('\n').map(l => l.trim()).filter(Boolean);
+          if (subLines.length > 1) {
+            const cleanOptLines = [];
+            for (const sl of subLines) {
+              if (/\?$/.test(sl) || /(?:సరిఅయింది\s*కాదు|ఏది\s*సరి|ఎవరు|క్రింది\s*వాటిలో|వాఖ్యములలో)/i.test(sl)) {
+                extractedRegionalStems.push(sl);
+              } else {
+                cleanOptLines.push(sl);
+              }
+            }
+            optText = cleanOptLines.join(' ');
+          }
+          if (byKey[item.key]) byKey[item.key].push(optText);
+        });
+
+        const recoveredOptions = ['1', '2', '3', '4'].map(k => {
+          const texts = byKey[k] || [];
+          return {
+            key: k,
+            text: texts.join(' / ')
+          };
+        }).filter(opt => opt.text.length > 0);
+
+        if (recoveredOptions.length === 4) {
+          q.options = recoveredOptions;
+          // Extract clean question stems (preserving both English & Telugu stems)
+          const lines = q.questionText.split('\n');
+          const stemLines = lines.filter(l => !/^\s*\([1-4]\)\s+/.test(l));
+          extractedRegionalStems.forEach(stem => {
+            if (!stemLines.some(sl => sl.includes(stem))) {
+              stemLines.push(stem);
+            }
+          });
+          if (stemLines.length > 0) {
+            q.questionText = stemLines.join('\n').trim();
+          }
+        }
+      }
+    }
+
+    // 3. MERGE BILINGUAL 8-OPTIONS (4 English options followed by 4 Telugu options)
+    if (Array.isArray(q.options) && q.options.length === 8) {
+      const first4 = q.options.slice(0, 4);
+      const last4 = q.options.slice(4, 8);
+      const hasIndic = (str) => /[\u0C00-\u0C7F\u0900-\u097F]/.test(str);
+      const isBilingualHalves = (hasIndic(last4[0].text) && !hasIndic(first4[0].text)) ||
+                                (first4[0].key === last4[0].key);
+      if (isBilingualHalves) {
+        q.options = first4.map((opt1, idx) => {
+          const opt2 = last4[idx];
+          return {
+            key: opt1.key || String(idx + 1),
+            text: `${opt1.text} / ${opt2.text}`
+          };
+        });
+      }
+    }
+
+    // 4. Disambiguate statement and match table rows mistakenly put in options
     if (Array.isArray(q.options) && q.options.length > 4) {
       const isComboChoice = (opt) => {
         const t = String(opt.text || '').trim();
@@ -1893,16 +1985,17 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
       }
     }
 
-    // 3. Strip spurious trailing option markers or multi-column passage bleeds appended to question stem
+    // 5. Strip spurious trailing option markers or multi-column passage bleeds appended to question stem
     if (q.questionText && typeof q.questionText === 'string') {
-      // E.g. "How did most people regard early motor cars? (1) జర్మనీ మరియు ఫ్రాన్స్‌లలో..."
-      // Detect when an question ending with '?' is followed by a spurious '(1)' or '1.' and trailing passage/bleed text
       const bleedMatch = q.questionText.match(/^([\s\S]*?\?)\s*(?:\([1-4]\)|\[[1-4]\]|\b[1-4][\.\)])\s+([\s\S]+)$/);
       if (bleedMatch) {
-        const stem = bleedMatch[1].trim();
-        // If options are already populated (>= 2 choices), the trailing '(1) ...' in the stem is an erroneous bleed
-        if (Array.isArray(q.options) && q.options.length >= 2) {
-          q.questionText = stem;
+        const trailing = bleedMatch[2].trim();
+        // If the trailing text contains a question mark '?' (like a bilingual question stem), do NOT strip!
+        // Only strip if trailing text is a spurious passage/bleed that does not have its own question mark
+        if (!trailing.includes('?')) {
+          if (Array.isArray(q.options) && q.options.length >= 2 && q.options.every(o => o.text && o.text.length > 3)) {
+            q.questionText = bleedMatch[1].trim();
+          }
         }
       }
     }

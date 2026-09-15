@@ -244,5 +244,53 @@ console.log(`  ✓ Final Q: [${mergedPaper.questions[199].questionNumber}] ${mer
 
 console.log('\n====================================================');
 console.log('🎉 ALL 9 TEST SUITES PASSED FLAWLESSLY!');
+
+// Test 10: Question 198 Akbar Statements MCQ Recovery & Bilingual Merger
+console.log('\nTest 10: Question 198 Statement MCQ Recovery & Bilingual Stem...');
+
+const rawQ198 = {
+  questionNumber: '198',
+  questionText: `Which of the following statements is not correct about reign of Akbar ?
+(1) Raja Todarmal, a Rajput noble became Akbar's revenue minister.
+(2) Raja Birbal, a Brahmin rose to high position and became Diwan.
+(3) Raja Mansingh, brother-in-law of Akbar was made the commander of the military forces.
+(4) Promoulgation of a new religious philosophy called the Din-I-Illahi in 1582 by Akbar.
+అక్బర్ కాలానికి సంబంధించి ఈ క్రింది వాఖ్యములలో ఏది సరిఅయింది కాదు ?
+(1) రాజ్యపుత్రుడు అయిన తోడర్మల్ అక్బర్ యొక్క రెవెన్యూ మంత్రిగా నియమించబడెను.
+(2) బ్రాహ్మణుడైన బీర్బల్ క్రమ క్రమంగా అనేక పదవులు అధిరోహిస్తూ దివాన్ గా నియమించబడెను.
+(3) అక్బర్ తన బావమరిది అయిన మాన్సింగ్ను సైన్యాధ్యక్షునిగా నియమించెను.
+(4) 1582 లో ‘దీన్-ఇ-ఇలాహి (Din-I-Illahi)’ అను నూతన మతాన్ని అక్బర్ ప్రకటించెను.`,
+  options: [
+    { key: '1', text: '1' },
+    { key: '2', text: '2' },
+    { key: '3', text: '3' },
+    { key: '4', text: '4' }
+  ],
+  marks: 1
+};
+
+const sanitizedQ198 = handler.sanitizeAIExtractedQuestion(rawQ198);
+
+assert.strictEqual(sanitizedQ198.options.length, 4, 'Should recover exactly 4 options');
+assert.ok(sanitizedQ198.options[0].text.includes('Raja Todarmal'), 'Option 1 should contain English text');
+assert.ok(sanitizedQ198.options[0].text.includes('తోడర్మల్'), 'Option 1 should contain Telugu translation');
+assert.ok(sanitizedQ198.options[1].text.includes('Raja Birbal'), 'Option 2 should contain English text');
+assert.ok(sanitizedQ198.options[1].text.includes('బీర్బల్'), 'Option 2 should contain Telugu translation');
+assert.ok(sanitizedQ198.options[2].text.includes('Raja Mansingh'), 'Option 3 should contain English text');
+assert.ok(sanitizedQ198.options[2].text.includes('మాన్సింగ్'), 'Option 3 should contain Telugu translation');
+assert.ok(sanitizedQ198.options[3].text.includes('Din-I-Illahi'), 'Option 4 should contain English text');
+assert.ok(sanitizedQ198.options[3].text.includes('దీన్-ఇ-ఇలాహి'), 'Option 4 should contain Telugu translation');
+assert.ok(sanitizedQ198.questionText.includes('reign of Akbar'), 'Question stem should keep English prompt');
+assert.ok(sanitizedQ198.questionText.includes('అక్బర్ కాలానికి'), 'Question stem should keep Telugu prompt');
+
+console.log('  ✓ Q198 Question Stem:\n    ', sanitizedQ198.questionText.replace(/\n/g, ' '));
+console.log('  ✓ Q198 Option 1:', sanitizedQ198.options[0].text);
+console.log('  ✓ Q198 Option 2:', sanitizedQ198.options[1].text);
+console.log('  ✓ Q198 Option 3:', sanitizedQ198.options[2].text);
+console.log('  ✓ Q198 Option 4:', sanitizedQ198.options[3].text);
+console.log('  ✓ Verified Q198 recovered all 4 bilingual options with zero dummy placeholders!');
+
+console.log('\n====================================================');
+console.log('🎉 ALL 10 TEST SUITES PASSED FLAWLESSLY!');
 console.log('====================================================');
 process.exit(0);
