@@ -153,6 +153,12 @@
           <span id="nav-vault-count">Paper Vault (0)</span>
         </button>
 
+        <!-- New Exam Folder Button in Navbar -->
+        <button onclick="app.openNewFolderModal()" class="inline-flex items-center justify-center px-3 py-2 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors border border-amber-300 shadow-xs" title="Create New State Exam / Paper Branch Folder">
+          <i data-lucide="folder-plus" class="w-3.5 h-3.5 mr-1 text-amber-600"></i>
+          <span>+ New Folder</span>
+        </button>
+
         <!-- Start Interactive Quiz Button -->
         <button id="btn-open-quiz" onclick="app.launchQuiz()" class="hidden inline-flex items-center justify-center px-3.5 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition-all">
           <i data-lucide="play-circle" class="w-4 h-4 mr-1.5"></i>
@@ -211,6 +217,22 @@
         <button onclick="app.openAiKeyModal()" class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold underline flex items-center">
           <i data-lucide="settings" class="w-3.5 h-3.5 mr-1"></i> API Key Settings
         </button>
+      </div>
+
+      <!-- Quick Organization Banner -->
+      <div class="max-w-2xl mx-auto mb-5 px-4 py-2.5 rounded-xl bg-amber-50/80 border border-amber-200 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-amber-950 shadow-xs">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="folder-tree" class="w-4 h-4 text-amber-600 shrink-0"></i>
+          <span>Organize papers by <strong>Board</strong> ➔ <strong>Exam</strong> ➔ <strong>Specialization Branch</strong></span>
+        </div>
+        <div class="flex items-center space-x-2 shrink-0">
+          <button onclick="app.openNewFolderModal()" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg transition-colors inline-flex items-center gap-1 shadow-2xs">
+            <i data-lucide="folder-plus" class="w-3.5 h-3.5"></i> + Create Folder
+          </button>
+          <button onclick="app.openVaultModal()" class="px-2.5 py-1 bg-white hover:bg-slate-50 text-indigo-700 border border-indigo-200 font-semibold rounded-lg transition-colors inline-flex items-center gap-1 shadow-2xs">
+            <i data-lucide="archive" class="w-3.5 h-3.5 text-indigo-600"></i> View Vault
+          </button>
+        </div>
       </div>
 
       <!-- Ingestion Mode Tabs -->
@@ -1208,11 +1230,16 @@
           </div>
           <h4 class="font-bold text-slate-800 text-sm">Your Paper Vault is Empty</h4>
           <p class="text-xs text-slate-500 max-w-md mx-auto">
-            Extract any question paper from PDF or image, and it will be stored here automatically. You can also import existing question paper JSON files.
+            Extract any question paper from PDF or image, or create your State Exam & Paper folders first and upload papers year-by-year into them.
           </p>
-          <button onclick="app.loadSamplePapersToVault()" class="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-lg transition-colors inline-flex items-center gap-1.5">
-            <i data-lucide="file-plus" class="w-3.5 h-3.5"></i> Load Sample Exam Papers
-          </button>
+          <div class="flex items-center justify-center gap-2 pt-2">
+            <button onclick="app.openNewFolderModal()" class="px-4 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 text-xs font-semibold rounded-lg transition-colors inline-flex items-center gap-1.5">
+              <i data-lucide="folder-plus" class="w-3.5 h-3.5 text-amber-600"></i> + Create Exam Folder
+            </button>
+            <button onclick="app.loadSamplePapersToVault()" class="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-lg transition-colors inline-flex items-center gap-1.5">
+              <i data-lucide="file-plus" class="w-3.5 h-3.5"></i> Load Sample Exam Papers
+            </button>
+          </div>
         </div>
 
         <!-- HIERARCHICAL FOLDERS VIEW (Board ➔ Exam ➔ Paper / Specialization ➔ Years) -->

@@ -130,9 +130,27 @@ async function runTests() {
   console.log('Branch years after second upload:', yearKeys3);
   assert.strictEqual(yearKeys3.length, 2, 'Branch should now contain 2 years (2022 and 2024)');
   assert.ok(yearKeys3.includes('2024') && yearKeys3.includes('2022'), 'Branch must contain both 2022 and 2024');
-  console.log('✅ Multi-Year storage verified inside parent folder!');
+  // ==========================================
+  // Test 5: Custom Folder Deletion Verification
+  // ==========================================
+  console.log('\n--- Test 5: Custom Folder Deletion ---');
+  const tempFolder = await vault.createFolder({
+    board: 'APPSC',
+    exam: 'Group 1',
+    paperType: 'common',
+    paperCode: 'Paper 1',
+    specialization: 'General Studies'
+  });
+  let foldersList = await vault.getCustomFolders();
+  assert.ok(foldersList.some(f => f.id === tempFolder.folder.id), 'Temp folder should exist');
+  console.log('✅ Temporary folder registered:', tempFolder.folder.id);
 
-  console.log('\n🎉 ALL MANUAL FOLDER CREATION & IN-FOLDER UPLOAD TESTS PASSED FLAWLESSLY!');
+  await vault.deleteFolder(tempFolder.folder.id);
+  foldersList = await vault.getCustomFolders();
+  assert.ok(!foldersList.some(f => f.id === tempFolder.folder.id), 'Temp folder should be removed');
+  console.log('✅ Folder deleted and verified from storage!');
+
+  console.log('\n🎉 ALL MANUAL FOLDER CREATION, UPLOAD & DELETION TESTS PASSED FLAWLESSLY!');
 }
 
 runTests().catch(err => {

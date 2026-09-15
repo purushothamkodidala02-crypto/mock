@@ -1530,11 +1530,25 @@ class AppController {
     if (!window.paperVault) return;
     try {
       const papers = await window.paperVault.getAllPapersSummary();
-      const count = papers.length;
+      const customFolders = await window.paperVault.getCustomFolders();
+      const count = (papers ? papers.length : 0);
+      const folderCount = (customFolders ? customFolders.length : 0);
       const navCountElem = document.getElementById('nav-vault-count');
       const modalBadgeElem = document.getElementById('vault-modal-badge');
-      if (navCountElem) navCountElem.textContent = `Paper Vault (${count})`;
-      if (modalBadgeElem) modalBadgeElem.textContent = `${count} Paper${count === 1 ? '' : 's'} Stored`;
+      if (navCountElem) {
+        if (count === 0 && folderCount > 0) {
+          navCountElem.textContent = `Paper Vault (${folderCount} folder${folderCount === 1 ? '' : 's'})`;
+        } else {
+          navCountElem.textContent = `Paper Vault (${count})`;
+        }
+      }
+      if (modalBadgeElem) {
+        if (count === 0 && folderCount > 0) {
+          modalBadgeElem.textContent = `${folderCount} Folder${folderCount === 1 ? '' : 's'} Created`;
+        } else {
+          modalBadgeElem.textContent = `${count} Paper${count === 1 ? '' : 's'} Stored`;
+        }
+      }
     } catch (e) {
       console.warn('Error updating vault badge:', e);
     }
@@ -1572,11 +1586,15 @@ class AppController {
     this.updateVaultNavBadge();
 
     const papers = await window.paperVault.getAllPapersSummary();
+    const customFolders = await window.paperVault.getCustomFolders();
     const emptyState = document.getElementById('vault-empty-state');
     const tableContainer = document.getElementById('vault-papers-table-container');
     const hierContainer = document.getElementById('vault-hierarchy-container');
 
-    if (!papers || papers.length === 0) {
+    const hasPapers = papers && papers.length > 0;
+    const hasFolders = customFolders && customFolders.length > 0;
+
+    if (!hasPapers && !hasFolders) {
       if (emptyState) emptyState.classList.remove('hidden');
       if (tableContainer) tableContainer.classList.add('hidden');
       if (hierContainer) hierContainer.classList.add('hidden');
@@ -1586,7 +1604,7 @@ class AppController {
 
     if (emptyState) emptyState.classList.add('hidden');
 
-    if (this.vaultView === 'hierarchy') {
+    if (this.vaultView === 'hierarchy' || !hasPapers) {
       if (hierContainer) hierContainer.classList.remove('hidden');
       if (tableContainer) tableContainer.classList.add('hidden');
       await this.renderVaultHierarchy();
@@ -1683,6 +1701,11 @@ class AppController {
                 <i data-lucide="upload" class="w-3 h-3 text-amber-200"></i>
                 <span>+ Upload Paper Here</span>
               </button>
+              ${yearKeys.length === 0 ? `
+              <button onclick="app.deleteCustomFolder('${this.escapeHtml(paperBranch.folderId || paperBranch.paperKey)}')" class="px-2 py-1 text-[11px] font-semibold rounded-lg bg-white text-rose-600 hover:bg-rose-50 border border-slate-200 transition-all flex items-center gap-1" title="Delete this empty branch folder">
+                <i data-lucide="trash-2" class="w-3 h-3 text-rose-500"></i>
+                <span>Delete</span>
+              </button>` : ''}
               ${yearKeys.length > 0 ? `
               <button onclick="app.toggleSelectBranchPapers('${paperBranch.paperKey}', ${!allBranchSelected})" class="px-2.5 py-1 text-[11px] font-semibold rounded-lg ${allBranchSelected ? 'bg-indigo-100 text-indigo-800' : 'bg-white text-slate-700 hover:bg-slate-50 border border-slate-200'} transition-all flex items-center gap-1">
                 ${allBranchSelected ? '✓ All Years Selected' : '+ Select All Years'}
@@ -2060,10 +2083,23 @@ class AppController {
         specialization
       });
       this.closeNewFolderModal();
+      this.openVaultModal();
       await this.renderVaultContent();
       this.setupIcons();
     } catch (e) {
       alert(`Could not create folder: ${e.message || e}`);
+    }
+  }
+
+  async deleteCustomFolder(folderId) {
+    if (!confirm('Are you sure you want to remove this empty folder branch?')) return;
+    if (!window.paperVault) return;
+    try {
+      await window.paperVault.deleteFolder(folderId);
+      await this.renderVaultContent();
+      this.setupIcons();
+    } catch (e) {
+      alert(`Could not delete folder: ${e.message || e}`);
     }
   }
 
