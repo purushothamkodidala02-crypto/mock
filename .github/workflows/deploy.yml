@@ -15,6 +15,9 @@ jobs:
       id-token: write # Needed for Deno Deploy authentication
       contents: read  # Needed to clone the repository
 
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "true"
+
     steps:
       - name: Clone repository
         uses: actions/checkout@v4
@@ -22,5 +25,5 @@ jobs:
       - name: Deploy to Deno Deploy
         uses: denoland/deployctl@v1
         with:
-          project: "paper-extract-studio" # Replace with your Deno Deploy project name if different
+          project: "mock"
           entrypoint: "main.ts"
