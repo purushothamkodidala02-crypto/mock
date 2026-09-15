@@ -587,6 +587,35 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
   }
 
   /**
+   * Detects whether a document page or text chunk contains an Answer Key Table
+   * (e.g. TSLPRB - 2022 PRELIMINARY KEY, Q.No. Series A Series B Series C Series D)
+   * rather than actual question content.
+   */
+  isAnswerKeyPage(text) {
+    if (!text || typeof text !== 'string') return false;
+    const trimmed = text.trim();
+    if (trimmed.length < 30) return false;
+
+    // 1. Explicit Answer Key title headers
+    const hasKeyHeader = /(?:preliminary|final|provisional|official|master)\s*(?:answer\s*)?key|answer\s*key\s*(?:sheet|table|chart|paper)?/i.test(trimmed);
+
+    // 2. Tabular answer key indicators (Q.No + Series / Booklet / Answers)
+    const hasTableHeaders = /(?:q\.?\s*no|question\s*no|s\.?\s*no)[\s\S]{1,40}(?:series\s*[a-d]|booklet|ans(?:wer)?)/i.test(trimmed);
+
+    // 3. Dense numeric answer mappings e.g. "1 3 2 4", "2 1 4 3" in tabular format
+    const hasDenseKeyRows = /\b(?:q\.?\s*no|qno)\b/i.test(trimmed) && /\b1\s+[1-4a-d]\s+[1-4a-d]/i.test(trimmed);
+
+    // 4. Repeated series table pattern
+    const hasSeriesCols = /series\s*a[\s\S]*series\s*b/i.test(trimmed);
+
+    // 5. Simple 1-column answer key lines e.g. "1 - A\n2 - B\n3 - C"
+    const hasSimpleKeyRows = /\b1\s*[-–.:]\s*[a-d1-4]\b/i.test(trimmed) && /\b2\s*[-–.:]\s*[a-d1-4]\b/i.test(trimmed);
+
+    return (hasKeyHeader && (hasTableHeaders || hasSeriesCols || hasDenseKeyRows || hasSimpleKeyRows)) ||
+           (hasTableHeaders && (hasSeriesCols || hasDenseKeyRows));
+  }
+
+  /**
    * Main Smart Entry Point for Gemini AI Extraction
    * Automatically selects the fastest, most reliable extraction strategy:
    * 1. If PDF has text layer (0.5s local text extraction): Chunks into parallel/sequential fast AI batches (~2s per batch)
@@ -653,14 +682,17 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
         }
 
         // Categorize each page into text page vs scanned/empty page
+        // Separate out Answer Key pages so they are never converted to fake questions
         const textPages = [];
         const scannedPages = [];
+        const answerKeyPages = [];
 
         for (const p of targetPages) {
           const pText = (pageTexts[p - 1] || '').trim();
-          // Real exam pages with digital text have >= 50 characters.
-          // Scanned / raster pages have 0 chars (or just a solitary digit like "24").
-          if (pText.length >= 50) {
+          if (this.isAnswerKeyPage(pText)) {
+            console.log(`[Gemini Extractor] Page ${p} identified as Answer Key table. Excluding from question batches.`);
+            answerKeyPages.push({ pageNum: p, text: pText });
+          } else if (pText.length >= 50) {
             textPages.push(p);
           } else {
             scannedPages.push(p);
@@ -741,24 +773,25 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
    * Prioritizes page boundaries (2 pages per batch) so questions are never fragmented,
    * never omitted, and never exceed Gemini's output generation window.
    */
-  splitTextIntoBatches(rawText, targetBatchSize = 12) {
+  splitTextIntoBatches(rawText, targetBatchSize = 12, pagesPerBatch = 1) {
     if (!rawText || typeof rawText !== 'string') return [rawText || ''];
 
     // STRATEGY 1: Split by page markers (--- [Page X] ---)
-    // 2 pages per batch guarantees ~8-15 questions per batch, keeping batches fast, complete, and fully generated
+    // 1 page per batch guarantees 100% extraction coverage without skipping complex/dense pages
     const pageMarkerRegex = /(?:^|\n)(?=---\s*\[?Page\s*\d+\]?\s*---)/i;
     const rawPageBlocks = rawText.split(pageMarkerRegex).map(b => b.trim()).filter(Boolean);
 
     if (rawPageBlocks.length > 1) {
-      const pagesPerBatch = 2;
+      // Exclude answer key blocks from question extraction batches
+      const validBlocks = rawPageBlocks.filter(b => !this.isAnswerKeyPage(b));
       const batches = [];
-      for (let i = 0; i < rawPageBlocks.length; i += pagesPerBatch) {
-        const chunk = rawPageBlocks.slice(i, i + pagesPerBatch).join('\n\n').trim();
+      for (let i = 0; i < validBlocks.length; i += pagesPerBatch) {
+        const chunk = validBlocks.slice(i, i + pagesPerBatch).join('\n\n').trim();
         if (chunk.length > 0) {
           batches.push(chunk);
         }
       }
-      return batches;
+      return batches.length > 0 ? batches : [rawText];
     }
 
     // STRATEGY 2: Split by question line indices
@@ -875,9 +908,17 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
     const fileName = fileOrBuffer.name || 'exam.pdf';
 
     // 1. Process Text Pages (e.g. Questions 1 to 125)
+    // Filter out Answer Key pages so they are never parsed into fake questions
+    const answerKeyPages = [];
     const textPagesWithContent = textPages.filter(p => {
       const txt = (pageTexts[p - 1] || '').trim();
-      return txt.length >= 60;
+      if (txt.length < 50) return false;
+      if (this.isAnswerKeyPage(txt)) {
+        console.log(`[Gemini Extractor] Page ${p} identified as Answer Key table. Preserving for answer mapping.`);
+        answerKeyPages.push({ pageNum: p, text: txt });
+        return false;
+      }
+      return true;
     });
 
     if (textPagesWithContent.length > 0) {
@@ -885,7 +926,8 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
         .map(p => `--- [Page ${p}] ---\n${pageTexts[p - 1]}`)
         .join('\n\n');
 
-      const textBatches = this.splitTextIntoBatches(textContent, 12);
+      // 1 page per batch guarantees 100% question extraction without skipping complex pages
+      const textBatches = this.splitTextIntoBatches(textContent, 10, 1);
       const totalTextBatches = textBatches.length;
       progress(`⚡ Digitizing ${textPagesWithContent.length} text pages across ${totalTextBatches} fast AI batches...`, 20);
 
@@ -957,14 +999,18 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
     const mergedResult = this.mergeBatches(allBatchResults, fileName);
 
     // 4. Auto-map Answer Key Table if present (e.g. Page 39 Preliminary Key table)
-    if (window.questionPaperExtractor && typeof window.questionPaperExtractor.extractAnswerKeyTable === 'function' && pdfResult.text) {
+    const combinedKeyText = answerKeyPages.length > 0
+      ? answerKeyPages.map(k => k.text).join('\n')
+      : (pdfResult.text || '');
+
+    if (window.questionPaperExtractor && typeof window.questionPaperExtractor.extractAnswerKeyTable === 'function' && combinedKeyText) {
       try {
-        const fullDocText = pdfResult.text + ' ' + fileName;
+        const fullDocText = combinedKeyText + ' ' + (pdfResult.text || '') + ' ' + fileName;
         const matchSeries = fullDocText.match(/\b12341-([A-D])\b/i) ||
                             fileName.match(/\b(?:series|set|code|booklet)[-_ ]*([A-D])\b/i);
         const targetSeries = matchSeries ? matchSeries[1].toUpperCase() : 'A';
 
-        const lines = pdfResult.text.split('\n');
+        const lines = combinedKeyText.split('\n');
         const keyResult = window.questionPaperExtractor.extractAnswerKeyTable(lines, { bookletSeries: targetSeries });
         if (keyResult && keyResult.found && Object.keys(keyResult.answerKeyMap).length > 0) {
           let mappedCount = 0;
@@ -1218,7 +1264,6 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
 
     const firstMeta = batchResults[0]?.metadata || {};
     const allQuestions = [];
-    const sectionMap = new Map();
     let globalQIndex = 1;
     let totalMarks = 0;
 
@@ -1236,17 +1281,6 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
 
       rawSections.forEach((sec, sIdx) => {
         const secTitle = (sec.title || `Section ${String.fromCharCode(65 + sIdx)}`).trim();
-        if (!sectionMap.has(secTitle)) {
-          sectionMap.set(secTitle, {
-            id: sec.id || `sec_${sectionMap.size + 1}`,
-            title: secTitle,
-            description: sec.description || '',
-            questions: [],
-            totalMarks: 0
-          });
-        }
-
-        const targetSec = sectionMap.get(secTitle);
 
         (sec.questions || []).forEach(q => {
           const qNum = String(q.questionNumber || globalQIndex).trim();
@@ -1284,8 +1318,6 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
           const prevQ = allQuestions.length > 0 ? allQuestions[allQuestions.length - 1] : null;
           standardizedQ = this.sanitizeAIExtractedQuestion(standardizedQ, prevQ);
 
-          targetSec.questions.push(standardizedQ);
-          targetSec.totalMarks += qMarks;
           allQuestions.push(standardizedQ);
         });
       });
@@ -1320,19 +1352,87 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
       q.id = `q_${idx + 1}`;
     });
 
-    const normalizedSections = Array.from(sectionMap.values());
-    normalizedSections.forEach(sec => {
-      sec.questions.sort((a, b) => {
-        const numA = parseInt(a.questionNumber, 10);
-        const numB = parseInt(b.questionNumber, 10);
-        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-        return 0;
-      });
+    const calculatedTotalMarks = allQuestions.reduce((sum, q) => sum + (Number(q.marks) || 1), 0);
+
+    // 4. Construct normalized sections strictly in numerical order
+    // Group contiguous questions that share the same section title
+    const distinctContiguousSections = [];
+    let currentBlock = null;
+
+    for (const q of allQuestions) {
+      const secTitle = (q.section || 'General Questions').trim();
+      if (!currentBlock || currentBlock.title !== secTitle) {
+        currentBlock = {
+          title: secTitle,
+          questions: [q]
+        };
+        distinctContiguousSections.push(currentBlock);
+      } else {
+        currentBlock.questions.push(q);
+      }
+    }
+
+    // Check if section names repeated across non-contiguous blocks (interleaving)
+    const seenTitles = new Set();
+    let hasInterleaving = false;
+    for (const block of distinctContiguousSections) {
+      if (seenTitles.has(block.title)) {
+        hasInterleaving = true;
+        break;
+      }
+      seenTitles.add(block.title);
+    }
+
+    const isGeneric = (title) => /^(?:section\s*[a-z0-9]|general\s*questions|batch\s*\d+|part\s*[a-z0-9]|default\s*section)$/i.test(title);
+    const hasAnyGeneric = distinctContiguousSections.some(b => isGeneric(b.title));
+    const allGeneric = distinctContiguousSections.every(b => isGeneric(b.title));
+
+    // Check if sections form a consistent sequence of letters (e.g. Section A, Section B, Section C)
+    const isCleanLetterSequence = allGeneric && distinctContiguousSections.length >= 2 && distinctContiguousSections.every((b, idx) => {
+      const match = b.title.match(/^(?:section|part)\s*([a-z0-9])/i);
+      if (!match) return false;
+      const expectedChar = String.fromCharCode(65 + idx); // 'A', 'B', 'C'...
+      return match[1].toUpperCase() === expectedChar || match[1] === String(idx + 1);
     });
+
+    const isGenuineSectionStructure = !hasInterleaving && distinctContiguousSections.length <= 5 && (
+      (!hasAnyGeneric && distinctContiguousSections.length >= 2) || isCleanLetterSequence
+    );
+
+    let normalizedSections = [];
+
+    // If sections were batch artifacts (interleaved, generic mixture, or fragmented into > 5 tiny blocks):
+    // Consolidate into a clean, unified examination section so questions 1 to 200 are ALWAYS 100% sequential!
+    if (!isGenuineSectionStructure) {
+      const qStart = allQuestions[0]?.questionNumber || '1';
+      const qEnd = allQuestions[allQuestions.length - 1]?.questionNumber || String(allQuestions.length);
+      const unifiedTitle = firstMeta.title || 'Examination Questions';
+      allQuestions.forEach(q => { q.section = unifiedTitle; });
+      normalizedSections = [{
+        id: 'sec_1',
+        title: unifiedTitle,
+        description: `Questions ${qStart} to ${qEnd} (${allQuestions.length} Questions)`,
+        questions: allQuestions,
+        totalMarks: calculatedTotalMarks
+      }];
+    } else {
+      // Genuine contiguous sections exist (e.g. Part A: Reading, Part B: Writing OR Section A, Section B, Section C)
+      normalizedSections = distinctContiguousSections.map((block, idx) => {
+        const blockMarks = block.questions.reduce((sum, q) => sum + (Number(q.marks) || 1), 0);
+        const qStart = block.questions[0]?.questionNumber || '';
+        const qEnd = block.questions[block.questions.length - 1]?.questionNumber || '';
+        return {
+          id: `sec_${idx + 1}`,
+          title: block.title,
+          description: `Questions ${qStart} to ${qEnd} (${block.questions.length} Questions)`,
+          questions: block.questions,
+          totalMarks: blockMarks
+        };
+      });
+    }
 
     const mcqCount = allQuestions.filter(q => q.type === 'mcq' || (q.options && q.options.length > 0)).length;
     const answeredCount = allQuestions.filter(q => q.correctAnswer && q.correctAnswer.length > 0).length;
-    const calculatedTotalMarks = allQuestions.reduce((sum, q) => sum + (Number(q.marks) || 1), 0);
 
     const stats = {
       totalQuestions: allQuestions.length,
