@@ -181,7 +181,68 @@ console.log('  Options:', standardized.questions[1].options.map(o => `(${o.key})
 console.log('  Answer Key:', standardized.questions[1].correctAnswer);
 console.log('  ✓ Output standardizer verified successfully.');
 
+// Test 9: Hybrid PDF 200-Question Multi-Batch Merger (Text Q1-125 + Vision Q126-200)
+console.log('\nTest 9: Hybrid PDF Multi-Batch Merger (200 Questions Total)...');
+
+// Generate Mock Text Batch (Q1 to Q125)
+const textBatchQuestions = [];
+for (let i = 1; i <= 125; i++) {
+  textBatchQuestions.push({
+    questionNumber: String(i),
+    questionText: `Digital Text Question ${i}`,
+    options: [
+      { key: '1', text: `Option 1 for Q${i}` },
+      { key: '2', text: `Option 2 for Q${i}` },
+      { key: '3', text: `Option 3 for Q${i}` },
+      { key: '4', text: `Option 4 for Q${i}` }
+    ],
+    marks: 1
+  });
+}
+const mockTextBatch = {
+  metadata: { title: 'TS Police Constable Prelims 2022', maxMarks: 200 },
+  sections: [{ id: 'sec_1', title: 'General Studies', questions: textBatchQuestions }]
+};
+
+// Generate Mock Vision Batch (Q126 to Q200)
+const visionBatchQuestions = [];
+for (let i = 126; i <= 200; i++) {
+  visionBatchQuestions.push({
+    questionNumber: String(i),
+    questionText: `Scanned Vision Question ${i}`,
+    options: [
+      { key: '1', text: `Option 1 for Q${i}` },
+      { key: '2', text: `Option 2 for Q${i}` },
+      { key: '3', text: `Option 3 for Q${i}` },
+      { key: '4', text: `Option 4 for Q${i}` }
+    ],
+    marks: 1
+  });
+}
+const mockVisionBatch = {
+  metadata: { title: 'TS Police Constable Prelims 2022', maxMarks: 200 },
+  sections: [{ id: 'sec_1', title: 'General Studies', questions: visionBatchQuestions }]
+};
+
+// Merge both batches
+const mergedPaper = handler.mergeBatches([mockTextBatch, mockVisionBatch], 'TS_Police_Constable_2022.pdf');
+
+assert.strictEqual(mergedPaper.success, true, 'Merged extraction should succeed');
+assert.strictEqual(mergedPaper.questions.length, 200, 'Should have exactly 200 questions');
+assert.strictEqual(mergedPaper.questions[0].questionNumber, '1', 'First question should be Q1');
+assert.strictEqual(mergedPaper.questions[124].questionNumber, '125', 'Question 125 should be in place');
+assert.strictEqual(mergedPaper.questions[125].questionNumber, '126', 'Question 126 should seamlessly follow Q125');
+assert.strictEqual(mergedPaper.questions[199].questionNumber, '200', 'Last question should be Q200');
+assert.strictEqual(mergedPaper.stats.totalQuestions, 200, 'Stats should report 200 total questions');
+assert.strictEqual(mergedPaper.stats.totalCalculatedMarks, 200, 'Stats should calculate 200 marks');
+
+console.log(`  ✓ Successfully merged Text Batch (1-125) and Visual Batch (126-200)!`);
+console.log(`  ✓ Total Questions: ${mergedPaper.questions.length} / 200`);
+console.log(`  ✓ First Q: [${mergedPaper.questions[0].questionNumber}] ${mergedPaper.questions[0].questionText}`);
+console.log(`  ✓ Mid Q:   [${mergedPaper.questions[125].questionNumber}] ${mergedPaper.questions[125].questionText}`);
+console.log(`  ✓ Final Q: [${mergedPaper.questions[199].questionNumber}] ${mergedPaper.questions[199].questionText}`);
+
 console.log('\n====================================================');
-console.log('🎉 ALL 8 TEST SUITES PASSED FLAWLESSLY!');
+console.log('🎉 ALL 9 TEST SUITES PASSED FLAWLESSLY!');
 console.log('====================================================');
 process.exit(0);

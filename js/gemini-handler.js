@@ -618,35 +618,64 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
         console.warn('PDF text extraction error, falling back to direct vision upload:', pdfErr);
       }
 
-      if (pdfResult && pdfResult.text && pdfResult.text.trim().length >= 100) {
-        let targetText = pdfResult.text;
-        const numPages = pdfResult.numPages || 1;
+      if (pdfResult && pdfResult.numPages > 0) {
+        const numPages = pdfResult.numPages;
+        const pageTexts = pdfResult.pageTexts || [];
+        const targetPages = (options.pageRange === 'custom' && options.customRange)
+          ? this.parsePageRangeString(options.customRange, numPages)
+          : Array.from({ length: numPages }, (_, i) => i + 1);
 
-        // Apply custom page range filter if specified
-        if (options.pageRange === 'custom' && options.customRange) {
-          const selectedPages = this.parsePageRangeString(options.customRange, numPages);
-          if (selectedPages.length > 0 && pdfResult.pageTexts) {
-            targetText = selectedPages
-              .filter(p => p >= 1 && p <= pdfResult.pageTexts.length)
-              .map(p => `--- [Page ${p}] ---\n${pdfResult.pageTexts[p - 1]}`)
-              .join('\n\n');
-          }
-        }
-
-        // Check if the extracted text layer has corrupted/custom legacy font encoding (PUA glyphs)
-        // Highly common in Indian bilingual exam PDFs using non-Unicode fonts (Shree-Lipi, Anu, etc.)
-        const puaMatches = targetText.match(/(?:[\uE000-\uF8FF\uFFF0-\uFFFF]|[\uDB80-\uDBFF][\uDC00-\uDFFF])/g) || [];
-        const isCorruptedFontLayer = puaMatches.length >= 10;
+        // Check forceVision setting
         const forceVision = options.forceVision === true || options.extractionMode === 'vision';
-
-        if (isCorruptedFontLayer || forceVision) {
-          progress(`👁️ Custom / Non-Unicode regional font detected (${puaMatches.length} unmapped glyphs). Switching to Gemini Multimodal Vision to visually read authentic Telugu script...`, 20);
+        if (forceVision) {
+          progress(`👁️ Gemini Vision mode selected. Launching visual OCR on ${targetPages.length} pages...`, 20);
           return this.extractDirectPDF(fileOrBuffer, options, progress);
         }
 
-        // Fast Text-First AI Extraction for clean Unicode PDFs
-        progress(`⚡ Text layer active (${numPages} pages). Launching accelerated Gemini AI pipeline...`, 25);
-        return this.extractFromTextWithBatches(targetText, fileOrBuffer.name || 'exam.pdf', progress);
+        // Categorize each page into text page vs scanned/empty page
+        const textPages = [];
+        const scannedPages = [];
+
+        for (const p of targetPages) {
+          const pText = (pageTexts[p - 1] || '').trim();
+          // Real exam pages with digital text have >= 50 characters.
+          // Scanned / raster pages have 0 chars (or just a solitary digit like "24").
+          if (pText.length >= 50) {
+            textPages.push(p);
+          } else {
+            scannedPages.push(p);
+          }
+        }
+
+        // Check for corrupted PUA font encoding in text pages
+        const fullTextSample = textPages.map(p => pageTexts[p - 1] || '').join('\n');
+        const puaMatches = fullTextSample.match(/(?:[\uE000-\uF8FF\uFFF0-\uFFFF]|[\uDB80-\uDBFF][\uDC00-\uDFFF])/g) || [];
+        if (puaMatches.length >= 10) {
+          progress(`👁️ Custom / Non-Unicode font detected (${puaMatches.length} unmapped glyphs). Switching to Gemini Multimodal Vision to visually read authentic regional script...`, 20);
+          return this.extractDirectPDF(fileOrBuffer, options, progress);
+        }
+
+        // CASE A: Hybrid PDF (mixed digital text pages + scanned image pages)
+        // E.g. TS Police Constable where Pages 1-23 have text (Q1-125) and Pages 24-38 are scanned images (Q126-200)
+        if (scannedPages.length > 0 && textPages.length > 1) {
+          progress(`⚡ Hybrid PDF detected: ${textPages.length} text pages + ${scannedPages.length} scanned pages. Digitizing text + visual OCR for complete 100% coverage...`, 20);
+          return this.extractHybridPDF(fileOrBuffer, pdfResult, textPages, scannedPages, options, progress);
+        }
+
+        // CASE B: Pure Scanned PDF (all or almost all target pages have no digital text)
+        if (scannedPages.length > 0 && textPages.length <= 1) {
+          progress(`👁️ Scanned document detected (${scannedPages.length} pages). Launching Gemini Vision OCR...`, 20);
+          return this.extractDirectPDF(fileOrBuffer, options, progress);
+        }
+
+        // CASE C: Pure Clean Digital Text PDF (all target pages have active text layer)
+        if (textPages.length > 0) {
+          const targetText = textPages
+            .map(p => `--- [Page ${p}] ---\n${pageTexts[p - 1]}`)
+            .join('\n\n');
+          progress(`⚡ Text layer active (${numPages} pages). Launching accelerated Gemini AI pipeline...`, 25);
+          return this.extractFromTextWithBatches(targetText, fileOrBuffer.name || 'exam.pdf', progress);
+        }
       } else {
         // Scanned image PDF without text layer
         progress('Scanned document detected. Launching Gemini Vision OCR...', 20);
@@ -801,6 +830,135 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
 
     progress('Merging and standardizing all extracted questions...', 95);
     return this.mergeBatches(batchResults, fileName);
+  }
+
+  /**
+   * Hybrid PDF Extractor:
+   * Digitizes digital text pages via accelerated text batches,
+   * AND concurrently/sequentially digitizes scanned/image pages via Gemini Vision batches,
+   * then merges all questions into one complete, seamless examination paper.
+   */
+  async extractHybridPDF(fileOrBuffer, pdfResult, textPages, scannedPages, options = {}, onProgress = null) {
+    const progress = (msg, percent = null, keyInfo = null) => {
+      if (onProgress) onProgress(msg, percent, keyInfo);
+    };
+
+    const allBatchResults = [];
+    const pageTexts = pdfResult.pageTexts || [];
+    const fileName = fileOrBuffer.name || 'exam.pdf';
+
+    // 1. Process Text Pages (e.g. Questions 1 to 125)
+    const textPagesWithContent = textPages.filter(p => {
+      const txt = (pageTexts[p - 1] || '').trim();
+      return txt.length >= 60;
+    });
+
+    if (textPagesWithContent.length > 0) {
+      const textContent = textPagesWithContent
+        .map(p => `--- [Page ${p}] ---\n${pageTexts[p - 1]}`)
+        .join('\n\n');
+
+      const textBatches = this.splitTextIntoBatches(textContent, 25);
+      const totalTextBatches = textBatches.length;
+      progress(`⚡ Digitizing ${textPagesWithContent.length} text pages across ${totalTextBatches} fast AI batches...`, 20);
+
+      for (let i = 0; i < totalTextBatches; i++) {
+        if (this.currentAbortController && this.currentAbortController.signal.aborted) {
+          throw new Error('Extraction cancelled by user.');
+        }
+
+        const batchNum = i + 1;
+        const pct = Math.round(20 + (i / totalTextBatches) * 35);
+        progress(`⚡ [Text Batch ${batchNum}/${totalTextBatches}] Digitizing text questions...`, pct);
+
+        const res = await this.extractSingleTextBatch(textBatches[i], batchNum, totalTextBatches, (msg, p, kInfo) => {
+          const subPct = pct + Math.round(((p || 50) / 100) * (35 / totalTextBatches));
+          progress(`⚡ [Text Batch ${batchNum}/${totalTextBatches}] ${msg}`, Math.min(subPct, 55), kInfo);
+        });
+
+        if (res) {
+          allBatchResults.push(res);
+        }
+      }
+    }
+
+    // 2. Process Scanned Pages with Gemini Multimodal Vision (e.g. Questions 126 to 200)
+    // Group scanned pages into batches of 3 pages for high throughput and precision
+    const pagesPerBatch = 3;
+    const visualBatches = [];
+    for (let i = 0; i < scannedPages.length; i += pagesPerBatch) {
+      visualBatches.push(scannedPages.slice(i, i + pagesPerBatch));
+    }
+    const totalVisualBatches = visualBatches.length;
+
+    progress(`👁️ Digitizing ${scannedPages.length} scanned pages via Gemini Vision across ${totalVisualBatches} visual batches...`, 55);
+
+    for (let bIdx = 0; bIdx < totalVisualBatches; bIdx++) {
+      if (this.currentAbortController && this.currentAbortController.signal.aborted) {
+        throw new Error('Extraction cancelled by user.');
+      }
+
+      const pageNums = visualBatches[bIdx];
+      const pageDesc = pageNums.length === 1 ? `Page ${pageNums[0]}` : `Pages ${pageNums[0]} to ${pageNums[pageNums.length - 1]}`;
+      const pct = Math.round(55 + (bIdx / totalVisualBatches) * 38);
+
+      progress(`👁️ [Visual Batch ${bIdx + 1}/${totalVisualBatches}] Rendering ${pageDesc}...`, pct);
+
+      const renderedPages = await window.pdfHandler.renderPagesToJPEGs(fileOrBuffer, pageNums, 1.5);
+      const imageParts = renderedPages.map(rp => ({
+        inlineData: { mimeType: 'image/jpeg', data: rp.base64 }
+      }));
+
+      const res = await this.extractSingleVisualBatch(
+        imageParts,
+        pageDesc,
+        bIdx + 1,
+        totalVisualBatches,
+        (msg, p, kInfo) => {
+          const subPct = pct + Math.round(((p || 50) / 100) * (38 / totalVisualBatches));
+          progress(`👁️ [Visual Batch ${bIdx + 1}/${totalVisualBatches}] ${msg}`, Math.min(subPct, 94), kInfo);
+        }
+      );
+
+      if (res) {
+        allBatchResults.push(res);
+      }
+    }
+
+    // 3. Merge all batches into a unified 200-question paper
+    progress('✨ Merging all text and visual questions into complete paper...', 96);
+    const mergedResult = this.mergeBatches(allBatchResults, fileName);
+
+    // 4. Auto-map Answer Key Table if present (e.g. Page 39 Preliminary Key table)
+    if (window.questionPaperExtractor && typeof window.questionPaperExtractor.extractAnswerKeyTable === 'function' && pdfResult.text) {
+      try {
+        const fullDocText = pdfResult.text + ' ' + fileName;
+        const matchSeries = fullDocText.match(/\b12341-([A-D])\b/i) ||
+                            fileName.match(/\b(?:series|set|code|booklet)[-_ ]*([A-D])\b/i);
+        const targetSeries = matchSeries ? matchSeries[1].toUpperCase() : 'A';
+
+        const lines = pdfResult.text.split('\n');
+        const keyResult = window.questionPaperExtractor.extractAnswerKeyTable(lines, { bookletSeries: targetSeries });
+        if (keyResult && keyResult.found && Object.keys(keyResult.answerKeyMap).length > 0) {
+          let mappedCount = 0;
+          mergedResult.questions.forEach(q => {
+            const ans = keyResult.answerKeyMap[String(q.questionNumber).trim()];
+            if (ans && !q.correctAnswer) {
+              q.correctAnswer = ans;
+              mappedCount++;
+            }
+          });
+          if (mappedCount > 0) {
+            console.log(`[Gemini Extractor] Auto-mapped ${mappedCount} answers from Preliminary Key Table (Booklet ${targetSeries})!`);
+            mergedResult.stats.answeredCount = mergedResult.questions.filter(q => q.correctAnswer && q.correctAnswer.length > 0).length;
+          }
+        }
+      } catch (kErr) {
+        console.warn('[Gemini Extractor] Error auto-mapping answer key table:', kErr);
+      }
+    }
+
+    return mergedResult;
   }
 
   /**
@@ -1004,14 +1162,53 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
       });
     });
 
+    // 1. Sort all questions strictly in numerical order (e.g. 1 to 200)
+    allQuestions.sort((a, b) => {
+      const numA = parseInt(a.questionNumber, 10);
+      const numB = parseInt(b.questionNumber, 10);
+      if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+      return 0;
+    });
+
+    // 2. Deduplicate any boundary questions between batches
+    const seenQNums = new Set();
+    const uniqueQuestions = [];
+    for (const q of allQuestions) {
+      const qNumKey = (q.questionNumber || '').trim();
+      if (qNumKey && /^\d+$/.test(qNumKey)) {
+        if (seenQNums.has(qNumKey)) {
+          continue;
+        }
+        seenQNums.add(qNumKey);
+      }
+      uniqueQuestions.push(q);
+    }
+    allQuestions.length = 0;
+    allQuestions.push(...uniqueQuestions);
+
+    // 3. Re-assign clean sequential IDs (q_1 to q_200)
+    allQuestions.forEach((q, idx) => {
+      q.id = `q_${idx + 1}`;
+    });
+
     const normalizedSections = Array.from(sectionMap.values());
+    normalizedSections.forEach(sec => {
+      sec.questions.sort((a, b) => {
+        const numA = parseInt(a.questionNumber, 10);
+        const numB = parseInt(b.questionNumber, 10);
+        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+        return 0;
+      });
+    });
+
     const mcqCount = allQuestions.filter(q => q.type === 'mcq' || (q.options && q.options.length > 0)).length;
     const answeredCount = allQuestions.filter(q => q.correctAnswer && q.correctAnswer.length > 0).length;
+    const calculatedTotalMarks = allQuestions.reduce((sum, q) => sum + (Number(q.marks) || 1), 0);
 
     const stats = {
       totalQuestions: allQuestions.length,
-      totalCalculatedMarks: totalMarks,
-      statedMaxMarks: firstMeta.maxMarks || totalMarks,
+      totalCalculatedMarks: calculatedTotalMarks,
+      statedMaxMarks: firstMeta.maxMarks || calculatedTotalMarks,
       marksMatch: true,
       mcqCount: mcqCount,
       answeredCount: answeredCount,
