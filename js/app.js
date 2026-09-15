@@ -796,7 +796,13 @@ class AppController {
         source: this.extractionEngine === 'gemini' ? 'gemini_ai' : 'local_engine'
       };
       window.paperVault.savePaper(data, sourceInfo)
-        .then(() => this.updateVaultNavBadge())
+        .then((res) => {
+          if (res && res.id) {
+            this.currentPaperVaultId = res.id;
+            this.renderStudioFolderLocation(res.paper);
+          }
+          this.updateVaultNavBadge();
+        })
         .catch(err => console.warn('Could not auto-save to Paper Vault:', err));
     }
 
@@ -1944,9 +1950,16 @@ class AppController {
   // --- Classification Modal Controller ---
 
   async openClassifyModal(paperId) {
-    if (!window.paperVault) return;
-    const paper = await window.paperVault.getPaper(paperId);
-    if (!paper) return;
+    const id = paperId || this.currentPaperVaultId;
+    if (!window.paperVault || !id) {
+      alert('Please select or extract a question paper first.');
+      return;
+    }
+    const paper = await window.paperVault.getPaper(id);
+    if (!paper) {
+      alert('Paper record not found in Vault.');
+      return;
+    }
 
     document.getElementById('classify-paper-id').value = paper.id;
     document.getElementById('classify-title').value = paper.title || '';
@@ -1960,6 +1973,38 @@ class AppController {
     typeRadios.forEach(r => {
       r.checked = r.value === (paper.paperType || 'common');
     });
+
+    // Populate existing folders quick selector
+    const selectElem = document.getElementById('classify-existing-folders-select');
+    if (selectElem) {
+      selectElem.innerHTML = '<option value="">-- Or enter custom Board & Exam manually below --</option>';
+      try {
+        const customFolders = await window.paperVault.getCustomFolders();
+        customFolders.forEach((f, idx) => {
+          const opt = document.createElement('option');
+          opt.value = String(idx);
+          const isCommon = f.paperType === 'common';
+          opt.textContent = `${isCommon ? '📘' : '📙'} ${f.board} ➔ ${f.exam} ➔ ${f.paperCode ? f.paperCode + ': ' : ''}${f.specialization}`;
+          selectElem.appendChild(opt);
+        });
+
+        selectElem.onchange = () => {
+          const val = selectElem.value;
+          if (val !== '' && customFolders[val]) {
+            const chosen = customFolders[val];
+            if (chosen.board) document.getElementById('classify-board').value = chosen.board;
+            if (chosen.exam) document.getElementById('classify-exam').value = chosen.exam;
+            if (chosen.specialization) document.getElementById('classify-specialization').value = chosen.specialization;
+            if (chosen.paperCode) document.getElementById('classify-paper-code').value = chosen.paperCode;
+            typeRadios.forEach(r => {
+              r.checked = r.value === (chosen.paperType || 'common');
+            });
+          }
+        };
+      } catch (e) {
+        console.warn('Error loading custom folders into classify modal:', e);
+      }
+    }
 
     const modal = document.getElementById('paper-classify-modal');
     if (modal) modal.classList.remove('hidden');
@@ -2013,9 +2058,36 @@ class AppController {
       });
       this.closeClassifyModal();
       await this.renderVaultContent();
+
+      const updated = await window.paperVault.getPaper(paperId);
+      if (updated) {
+        this.renderStudioFolderLocation(updated);
+      }
     } catch (e) {
       alert(`Could not update classification: ${e.message || e}`);
     }
+  }
+
+  renderStudioFolderLocation(paper) {
+    if (!paper) return;
+    const banner = document.getElementById('studio-vault-banner');
+    if (!banner) return;
+    banner.classList.remove('hidden');
+
+    const bBoard = document.getElementById('studio-vault-board');
+    const bExam = document.getElementById('studio-vault-exam');
+    const bBranch = document.getElementById('studio-vault-branch');
+    const bYear = document.getElementById('studio-vault-year');
+
+    const isCommon = paper.paperType === 'common';
+    if (bBoard) bBoard.textContent = `🏛️ ${paper.board || 'State Board'}`;
+    if (bExam) bExam.textContent = `📋 ${paper.exam || 'General Exam'}`;
+    if (bBranch) {
+      bBranch.textContent = `${isCommon ? '📘' : '📙'} ${paper.paperCode ? paper.paperCode + ': ' : ''}${paper.specialization || (isCommon ? 'General Studies' : 'Specialization')}`;
+      bBranch.className = `px-2 py-0.5 ${isCommon ? 'bg-indigo-100 border-indigo-300 text-indigo-900' : 'bg-amber-100 border-amber-300 text-amber-900'} rounded border font-bold`;
+    }
+    if (bYear) bYear.textContent = `📅 ${paper.year || 'N/A'}`;
+    this.setupIcons();
   }
 
   // --- New Folder Modal Methods ---
@@ -2289,7 +2361,9 @@ class AppController {
         return;
       }
       this.closeVaultModal();
+      this.currentPaperVaultId = fullRecord.id;
       this.renderExtractedPaper(fullRecord.paperData);
+      this.renderStudioFolderLocation(fullRecord);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       console.error('Error loading paper from vault:', err);

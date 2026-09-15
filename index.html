@@ -420,6 +420,35 @@
     <!-- MAIN STUDIO WORKSPACE (Visible after Extraction) -->
     <div id="studio-workspace" class="hidden space-y-6">
 
+      <!-- VAULT FOLDER LOCATION BANNER -->
+      <div id="studio-vault-banner" class="p-4 rounded-2xl bg-indigo-50/80 border border-indigo-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs animate-fade-in">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-white text-indigo-600 border border-indigo-200 flex items-center justify-center font-bold shrink-0 shadow-xs">
+            <i data-lucide="folder-check" class="w-5 h-5 text-indigo-600"></i>
+          </div>
+          <div>
+            <div class="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Vault Storage Location:</div>
+            <div class="font-extrabold text-slate-900 text-xs flex flex-wrap items-center gap-1.5 mt-0.5">
+              <span id="studio-vault-board" class="px-2 py-0.5 bg-white rounded border border-indigo-200">🏛️ State Board</span>
+              <span>➔</span>
+              <span id="studio-vault-exam" class="px-2 py-0.5 bg-white rounded border border-indigo-200">📋 Exam</span>
+              <span>➔</span>
+              <span id="studio-vault-branch" class="px-2 py-0.5 bg-indigo-100 rounded border border-indigo-300 text-indigo-900 font-bold">📘 Paper / Branch</span>
+              <span>➔</span>
+              <span id="studio-vault-year" class="px-2 py-0.5 bg-amber-100 rounded border border-amber-300 text-amber-900 font-bold">📅 Year</span>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center space-x-2 shrink-0 w-full sm:w-auto justify-end">
+          <button onclick="app.openClassifyModal(app.currentPaperVaultId)" class="px-3 py-1.5 bg-white hover:bg-slate-50 text-indigo-700 border border-indigo-300 font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1">
+            <i data-lucide="folder-cog" class="w-3.5 h-3.5 text-indigo-600"></i> Change Folder / Year
+          </button>
+          <button onclick="app.openVaultModal()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1">
+            <i data-lucide="archive" class="w-3.5 h-3.5 text-amber-300"></i> View in Vault
+          </button>
+        </div>
+      </div>
+
       <!-- TOP METRICS & STATS BAR -->
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
         
@@ -1297,6 +1326,16 @@
 
       <div class="p-5 space-y-4 text-xs">
         <input type="hidden" id="classify-paper-id">
+
+        <!-- Quick Pick from Custom Folders -->
+        <div id="classify-quick-folder-container" class="p-3 bg-amber-50/80 border border-amber-200 rounded-xl space-y-1.5">
+          <label class="block text-amber-950 font-bold flex items-center gap-1.5">
+            <i data-lucide="folder-symlink" class="w-3.5 h-3.5 text-amber-600"></i> Move to Created Exam Folder
+          </label>
+          <select id="classify-existing-folders-select" class="w-full px-3 py-1.5 bg-white border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 text-xs font-semibold text-slate-800">
+            <option value="">-- Or enter custom Board & Exam manually below --</option>
+          </select>
+        </div>
 
         <!-- Title -->
         <div>
