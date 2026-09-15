@@ -4,7 +4,9 @@ import { serveDir } from "https://deno.land/std@0.224.0/http/file_server.ts";
  * Deno Deploy Entry Point - PaperExtract Studio & Multi-Exam Vault
  * Serves static assets, routes, and provides health check on edge infrastructure.
  */
-Deno.serve(async (req: Request) => {
+const port = Number(Deno.env.get("PORT") || 8000);
+
+Deno.serve({ port }, async (req: Request) => {
   const url = new URL(req.url);
 
   // Health check endpoint
