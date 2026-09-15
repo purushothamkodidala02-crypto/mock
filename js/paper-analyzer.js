@@ -308,8 +308,8 @@ Return ONLY valid JSON matching this schema. Be thorough, actionable, and mathem
     progress(`Analyzing ${digest.totalPapers} question papers with Gemini AI...`, 35);
     const promptText = this.buildAnalysisPrompt(digest, options.customInstructions || '');
 
-    // Select analysis model (gemini-3.6-flash recommended; option to use gemini-2.5-pro for deep reasoning)
-    const model = options.model || handler.getModelName() || 'gemini-3.6-flash';
+    // Select analysis model (gemini-2.5-flash recommended; option to use gemini-2.5-pro for deep reasoning)
+    const model = options.model || handler.getModelName() || 'gemini-2.5-flash';
     progress(`Discovering exam design logic & patterns with ${model}...`, 50);
 
     // Call Gemini API via Text extraction pipeline

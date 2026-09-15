@@ -133,10 +133,10 @@
         <div class="hidden sm:flex items-center space-x-1.5 bg-slate-100 hover:bg-slate-200/70 px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs transition-colors">
           <i data-lucide="cpu" class="w-3.5 h-3.5 text-indigo-600"></i>
           <select id="nav-model-select" onchange="app.onModelSelectChange(this.value)" class="bg-transparent font-semibold text-slate-700 focus:outline-none cursor-pointer">
-            <option value="gemini-3.6-flash" selected>Gemini 3.6 Flash (Recommended)</option>
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+            <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash (Recommended)</option>
+            <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite</option>
             <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-            <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
+            <option value="gemini-3.7-flash">Gemini 3.7 Flash</option>
           </select>
         </div>
 
@@ -1079,24 +1079,24 @@
             <label class="font-bold text-slate-800 block">Default Extraction Model</label>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <label class="flex items-start space-x-2.5 p-3 rounded-xl border border-slate-200 hover:border-indigo-400 bg-white cursor-pointer transition-colors">
-                <input type="radio" name="modal-model-radio" value="gemini-3.6-flash" onchange="app.onModalModelRadioChange('gemini-3.6-flash')" class="mt-0.5 text-indigo-600" checked>
+                <input type="radio" name="modal-model-radio" value="gemini-2.5-flash" onchange="app.onModalModelRadioChange('gemini-2.5-flash')" class="mt-0.5 text-indigo-600" checked>
                 <div>
                   <div class="font-bold text-slate-900 flex items-center gap-1">
-                    Gemini 3.6 Flash
+                    Gemini 2.5 Flash
                     <span class="text-[10px] bg-indigo-100 text-indigo-800 px-1.5 py-0.2 rounded font-semibold">Recommended</span>
                   </div>
-                  <div class="text-[11px] text-slate-500 mt-0.5">Google's recommended Flash model: ultra-fast, native PDF & multimodal vision.</div>
+                  <div class="text-[11px] text-slate-500 mt-0.5">Proven accuracy, fast multimodal vision &amp; 1M context.</div>
                 </div>
               </label>
 
               <label class="flex items-start space-x-2.5 p-3 rounded-xl border border-slate-200 hover:border-indigo-400 bg-white cursor-pointer transition-colors">
-                <input type="radio" name="modal-model-radio" value="gemini-2.5-flash" onchange="app.onModalModelRadioChange('gemini-2.5-flash')" class="mt-0.5 text-indigo-600">
+                <input type="radio" name="modal-model-radio" value="gemini-3.5-flash-lite" onchange="app.onModalModelRadioChange('gemini-3.5-flash-lite')" class="mt-0.5 text-indigo-600">
                 <div>
                   <div class="font-bold text-slate-900 flex items-center gap-1">
-                    Gemini 2.5 Flash
-                    <span class="text-[10px] bg-sky-100 text-sky-800 px-1.5 py-0.2 rounded font-semibold">Fast</span>
+                    Gemini 3.5 Flash Lite
+                    <span class="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-semibold">Ultra Fast</span>
                   </div>
-                  <div class="text-[11px] text-slate-500 mt-0.5">High accuracy, fast multimodal vision & 1M context.</div>
+                  <div class="text-[11px] text-slate-500 mt-0.5">Ultra-fast, lowest latency &amp; high throughput.</div>
                 </div>
               </label>
 
@@ -1107,18 +1107,18 @@
                     Gemini 2.5 Pro
                     <span class="text-[10px] bg-purple-100 text-purple-800 px-1.5 py-0.2 rounded font-semibold">Deep Reasoning</span>
                   </div>
-                  <div class="text-[11px] text-slate-500 mt-0.5">Advanced reasoning for difficult math equations, complex tables & diagrams.</div>
+                  <div class="text-[11px] text-slate-500 mt-0.5">Advanced reasoning for difficult math equations, complex tables &amp; diagrams.</div>
                 </div>
               </label>
 
               <label class="flex items-start space-x-2.5 p-3 rounded-xl border border-slate-200 hover:border-indigo-400 bg-white cursor-pointer transition-colors">
-                <input type="radio" name="modal-model-radio" value="gemini-2.5-flash-lite" onchange="app.onModalModelRadioChange('gemini-2.5-flash-lite')" class="mt-0.5 text-indigo-600">
+                <input type="radio" name="modal-model-radio" value="gemini-3.7-flash" onchange="app.onModalModelRadioChange('gemini-3.7-flash')" class="mt-0.5 text-indigo-600">
                 <div>
                   <div class="font-bold text-slate-900 flex items-center gap-1">
-                    Gemini 2.5 Flash Lite
-                    <span class="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-semibold">Ultra Fast</span>
+                    Gemini 3.7 Flash
+                    <span class="text-[10px] bg-sky-100 text-sky-800 px-1.5 py-0.2 rounded font-semibold">Next-Gen</span>
                   </div>
-                  <div class="text-[11px] text-slate-500 mt-0.5">Lowest latency, high quota efficiency.</div>
+                  <div class="text-[11px] text-slate-500 mt-0.5">Next-gen reasoning &amp; agentic workflows.</div>
                 </div>
               </label>
             </div>

@@ -407,16 +407,16 @@ class GeminiHandler {
 
     // Standard high-performance supported models (2026 current models)
     this.supportedModels = [
-      { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash', desc: 'Recommended by Google — Latest flagship speed, native PDF & multimodal vision', badge: 'Recommended' },
-      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', desc: 'High accuracy, fast multimodal vision & 1M context', badge: 'Fast' },
+      { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', desc: 'Recommended — Proven accuracy, fast multimodal vision & 1M context', badge: 'Recommended' },
+      { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash-Lite', desc: 'Ultra-fast, lowest latency & high throughput', badge: 'Ultra Fast' },
       { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', desc: 'Deep reasoning — Complex exam papers, dense math & diagrams', badge: 'High Reasoning' },
-      { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash-Lite', desc: 'Ultra-fast, lowest latency & high throughput', badge: 'Ultra Fast' }
+      { id: 'gemini-3.7-flash', name: 'Gemini 3.7 Flash', desc: 'Next-gen reasoning & agentic workflows', badge: 'Next-Gen' }
     ];
 
     let savedModel = localStorage.getItem('gemini_model_name');
     const validModelIds = this.supportedModels.map(m => m.id);
-    if (!savedModel || !validModelIds.includes(savedModel) || savedModel === 'gemini-2.0-flash') {
-      savedModel = 'gemini-3.6-flash';
+    if (!savedModel || !validModelIds.includes(savedModel) || savedModel === 'gemini-2.0-flash' || savedModel === 'gemini-2.5-flash-lite' || savedModel === 'gemini-3.6-flash') {
+      savedModel = 'gemini-2.5-flash';
       localStorage.setItem('gemini_model_name', savedModel);
     }
     this.modelName = savedModel;
@@ -425,8 +425,10 @@ class GeminiHandler {
 
   getModelName() {
     const m = this.modelName || localStorage.getItem('gemini_model_name');
-    if (!m || m === 'gemini-2.0-flash' || !this.supportedModels.some(sm => sm.id === m)) {
-      return 'gemini-3.6-flash';
+    if (!m || m === 'gemini-2.0-flash' || m === 'gemini-2.5-flash-lite' || m === 'gemini-3.6-flash' || !this.supportedModels.some(sm => sm.id === m)) {
+      this.modelName = 'gemini-2.5-flash';
+      localStorage.setItem('gemini_model_name', 'gemini-2.5-flash');
+      return 'gemini-2.5-flash';
     }
     return m;
   }

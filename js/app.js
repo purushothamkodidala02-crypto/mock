@@ -2552,7 +2552,7 @@ class AppController {
           <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
             <div id="analysis-progress-fill" class="bg-gradient-to-r from-indigo-600 to-purple-600 h-2.5 rounded-full transition-all duration-300" style="width: 25%"></div>
           </div>
-          <div class="text-[11px] text-slate-400 font-mono">Running on model: ${window.geminiHandler ? window.geminiHandler.getModelName() : 'gemini-3.6-flash'}</div>
+          <div class="text-[11px] text-slate-400 font-mono">Running on model: ${window.geminiHandler ? window.geminiHandler.getModelName() : 'gemini-2.5-flash'}</div>
         </div>
       `;
       this.setupIcons();

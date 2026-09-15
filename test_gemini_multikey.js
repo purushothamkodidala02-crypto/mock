@@ -104,8 +104,8 @@ const models = handler.supportedModels;
 const modelIds = models.map(m => m.id);
 assert.ok(modelIds.includes('gemini-2.5-flash'), 'Should support gemini-2.5-flash');
 assert.ok(modelIds.includes('gemini-2.5-pro'), 'Should support gemini-2.5-pro');
-assert.ok(modelIds.includes('gemini-2.5-flash-lite'), 'Should support gemini-2.5-flash-lite');
-assert.ok(modelIds.includes('gemini-3.6-flash'), 'Should support gemini-3.6-flash');
+assert.ok(modelIds.includes('gemini-3.5-flash-lite'), 'Should support gemini-3.5-flash-lite');
+assert.ok(modelIds.includes('gemini-3.7-flash'), 'Should support gemini-3.7-flash');
 
 handler.setModelName('gemini-2.5-pro');
 assert.strictEqual(handler.getModelName(), 'gemini-2.5-pro', 'Should update active model');
