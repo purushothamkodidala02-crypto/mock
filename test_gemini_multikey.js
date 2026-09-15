@@ -12,7 +12,8 @@ global.localStorage = {
 
 global.window = { localStorage: global.localStorage };
 
-// Load gemini-handler.js
+// Load gemini-handler.js and extractor.js
+require('./js/extractor.js');
 require('./js/gemini-handler.js');
 
 console.log('====================================================');
@@ -344,7 +345,86 @@ console.log('  ✓ Batch 2 coverage: Page 3-4 (contains Questions 15 to 30)');
 console.log('  ✓ Batch 3 coverage: Page 5-6 (contains Questions 31 to 36)');
 console.log('  ✓ Verified 100% complete coverage: Question 1 & Questions 15-35 are never omitted!');
 
+console.log('\nTest 12: Auto-Recovery of Hallucinated Passage Questions & Dummy Options...');
+
+const rawPage3Text = `--- [Page 3] ---
+15. I have done a deal of work.
+(1) big (2) great (3) huge (4) enormous
+16. I never feel that I am superior (1) than (2) to anyone. (3) for (4) on
+17. Radha and Rima business partners.
+(1) are (2) is (3) was (4) had been
+Read the passage below and answer the questions (21-25).
+Ms. Yanada recalls all too clearly that mid-summer day in 1945 when US warplanes dropped an atomic bomb in Hiroshima.
+21. The US dropped on Hiroshima.
+(1) one bomb (2) two bombs (3) three bombs (4) four bombs`;
+
+// Simulate Gemini hallucinating synthetic questions from the Hiroshima passage
+const simulatedHallucinatedBatch = {
+  sections: [
+    {
+      id: 'sec_1',
+      title: 'English & Comprehension',
+      questions: [
+        {
+          id: 'q_15',
+          questionNumber: '15',
+          questionText: 'Based on the passage context regarding the nuclear bomb survivors in Japan:',
+          options: [
+            { key: '1', text: 'Option 1' },
+            { key: '2', text: 'Option 2' },
+            { key: '3', text: 'Option 3' },
+            { key: '4', text: 'Option 4' }
+          ]
+        },
+        {
+          id: 'q_16',
+          questionNumber: '16',
+          questionText: 'Based on the passage context regarding the atomic bomb victims:',
+          options: [
+            { key: '1', text: 'Option 1' },
+            { key: '2', text: 'Option 2' },
+            { key: '3', text: 'Option 3' },
+            { key: '4', text: 'Option 4' }
+          ]
+        },
+        {
+          id: 'q_21',
+          questionNumber: '21',
+          questionText: 'Based on the passage, what happened during the mid-summer day in 1945?',
+          options: [
+            { key: '1', text: 'Option 1' },
+            { key: '2', text: 'Option 2' },
+            { key: '3', text: 'Option 3' },
+            { key: '4', text: 'Option 4' }
+          ]
+        }
+      ]
+    }
+  ]
+};
+
+const recoveredBatch = handler.recoverHallucinatedQuestionsFromText(simulatedHallucinatedBatch, rawPage3Text);
+const recoveredQs = recoveredBatch.sections[0].questions;
+
+assert.strictEqual(recoveredQs[0].questionNumber, '15');
+assert.ok(recoveredQs[0].questionText.includes('done a deal of work'), 'Q15 must be recovered from real text');
+assert.strictEqual(recoveredQs[0].options[0].text, 'big', 'Q15 option 1 must be real option "big"');
+assert.strictEqual(recoveredQs[0].options[1].text, 'great', 'Q15 option 2 must be real option "great"');
+
+assert.strictEqual(recoveredQs[1].questionNumber, '16');
+assert.ok(recoveredQs[1].questionText.includes('superior'), 'Q16 must be recovered from real text');
+assert.strictEqual(recoveredQs[1].options[0].text, 'than', 'Q16 option 1 must be real option "than"');
+
+assert.strictEqual(recoveredQs[2].questionNumber, '21');
+assert.ok(recoveredQs[2].questionText.includes('US dropped'), 'Q21 must be recovered from real text');
+assert.strictEqual(recoveredQs[2].options[0].text, 'one bomb', 'Q21 option 1 must be real option "one bomb"');
+
+console.log('  ✓ Q15 recovered:', recoveredQs[0].questionText, '| Options:', recoveredQs[0].options.map(o => o.text).join(', '));
+console.log('  ✓ Q16 recovered:', recoveredQs[1].questionText, '| Options:', recoveredQs[1].options.map(o => o.text).join(', '));
+console.log('  ✓ Q21 recovered:', recoveredQs[2].questionText, '| Options:', recoveredQs[2].options.map(o => o.text).join(', '));
+console.log('  ✓ Verified 100% automatic recovery of authentic text when AI hallucinates!');
+
 console.log('\n====================================================');
-console.log('🎉 ALL 11 TEST SUITES PASSED FLAWLESSLY!');
+console.log('🎉 ALL 12 TEST SUITES PASSED FLAWLESSLY!');
 console.log('====================================================');
 process.exit(0);

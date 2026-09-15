@@ -515,12 +515,12 @@ Return ONLY a valid JSON object matching this exact JSON schema:
           "section": "Section A",
           "questionText": "Question text here...",
           "options": [
-            { "key": "A", "text": "Option A text" },
-            { "key": "B", "text": "Option B text" },
-            { "key": "C", "text": "Option C text" },
-            { "key": "D", "text": "Option D text" }
+            { "key": "1", "text": "First choice words from paper" },
+            { "key": "2", "text": "Second choice words from paper" },
+            { "key": "3", "text": "Third choice words from paper" },
+            { "key": "4", "text": "Fourth choice words from paper" }
           ],
-          "correctAnswer": "A",
+          "correctAnswer": "1",
           "explanation": ""
         }
       ]
@@ -529,6 +529,13 @@ Return ONLY a valid JSON object matching this exact JSON schema:
 }
 
 CRITICAL RULES:
+- STRICT ZERO-HALLUCINATION & ZERO-FABRICATION RULE:
+  * NEVER invent, synthesize, or fabricate questions or options!
+  * You are an exact transcription engine. Extract ONLY the questions and options that are printed verbatim in the document.
+  * NEVER create artificial questions starting with "Based on the passage...", "Based on the passage context regarding...", or similar synthetic prompts.
+  * NEVER output placeholder options like "Option 1", "Option 2", "Option 3", "Option 4" or "Option A", "Option B". Every single option text MUST contain the actual printed choice words from the paper (e.g. "(1) big (2) great (3) huge (4) enormous").
+  * When a page contains a reading passage (e.g. Hiroshima nuclear blast passage), questions BEFORE the passage (e.g. Questions 15 to 20) are INDEPENDENT grammar/vocabulary questions. EXTRACT THEIR PRINTED TEXT AND REAL OPTIONS VERBATIM!
+  * For reading passage questions (e.g. Questions 21 to 25), extract ONLY the actual printed questions and actual printed options! DO NOT invent hypothetical questions from the passage text.
 - MANDATORY: START FROM QUESTION 1 (OR FIRST QUESTION ON PAGE): You MUST extract the very first numbered question (e.g. Question 1) visible in this batch. Even if Question 1 has multi-column formatting, broken lines, or options split across lines (e.g. '1. A pair of socks been missing (2) from my room...'), reconstruct the complete question text and all options. NEVER omit Question 1 or dismiss it as header/title text!
 - EXTRACT ALL QUESTIONS IN THE CHUNK COMPLETELY: Extract EVERY single question in the provided chunk sequentially without stopping or omitting any intermediate questions.
 - Do NOT skip any questions or truncate output. Extract ALL questions visible.
@@ -1088,6 +1095,7 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
           }
 
           this.keyManager.recordSuccess(currentKey.id);
+          this.recoverHallucinatedQuestionsFromText(parsedJSON, batchText);
           return parsedJSON;
 
         } catch (err) {
@@ -1097,6 +1105,107 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
     }
 
     throw lastError || new Error(`Batch ${batchNum} extraction failed.`);
+  }
+
+  /**
+   * Recovers authentic printed questions when Gemini hallucinates "Based on the passage..."
+   * or outputs dummy placeholder options like "Option 1", "Option 2", "Option 3", "Option 4".
+   */
+  recoverHallucinatedQuestionsFromText(parsedJSON, rawBatchText) {
+    if (!parsedJSON || !rawBatchText || typeof rawBatchText !== 'string') return parsedJSON;
+
+    const isDummyOrHallucinated = (q) => {
+      if (!q) return false;
+      const isSyntheticStem = /^based\s+on\s+the\s+passage/i.test(String(q.questionText || '').trim());
+      const hasDummyOpts = Array.isArray(q.options) && q.options.length >= 2 && q.options.every(o => {
+        const t = String(o.text || '').trim();
+        const k = String(o.key || '').trim();
+        return (
+          t === k ||
+          /^[1-4]$/.test(t) ||
+          t.length === 0 ||
+          /^option\s*[1-4a-d]?\s*(?:text)?$/i.test(t)
+        );
+      });
+      return isSyntheticStem || hasDummyOpts;
+    };
+
+    const sections = parsedJSON.sections || [];
+    let hasHallucination = false;
+
+    sections.forEach(sec => {
+      (sec.questions || []).forEach(q => {
+        if (isDummyOrHallucinated(q)) hasHallucination = true;
+      });
+    });
+
+    if (Array.isArray(parsedJSON.questions)) {
+      parsedJSON.questions.forEach(q => {
+        if (isDummyOrHallucinated(q)) hasHallucination = true;
+      });
+    }
+
+    if (!hasHallucination) return parsedJSON;
+
+    // Use local rule-based extractor to extract authentic questions from rawBatchText
+    let localRes = null;
+    try {
+      const extEngine = (typeof window !== 'undefined' && window.extractorEngine) ? window.extractorEngine : null;
+      if (extEngine) {
+        localRes = extEngine.extract(rawBatchText);
+      }
+    } catch (err) {
+      console.warn('[Gemini Extractor] Local fallback recovery failed:', err);
+    }
+
+    if (!localRes || !Array.isArray(localRes.questions) || localRes.questions.length === 0) {
+      return parsedJSON;
+    }
+
+    const localMap = {};
+    localRes.questions.forEach(lq => {
+      const num = String(lq.questionNumber || '').trim();
+      if (num) localMap[num] = lq;
+    });
+
+    sections.forEach(sec => {
+      sec.questions = (sec.questions || []).map(q => {
+        if (isDummyOrHallucinated(q)) {
+          const num = String(q.questionNumber || '').trim();
+          const localQ = localMap[num];
+          if (localQ && localQ.options && localQ.options.length >= 2) {
+            console.log(`[Gemini Extractor] Auto-recovered authentic Q${num} from document text: "${localQ.questionText.slice(0, 45)}..."`);
+            return {
+              ...q,
+              questionText: localQ.questionText,
+              options: localQ.options,
+              type: localQ.type || q.type || 'mcq'
+            };
+          }
+        }
+        return q;
+      });
+    });
+
+    if (Array.isArray(parsedJSON.questions)) {
+      parsedJSON.questions = parsedJSON.questions.map(q => {
+        if (isDummyOrHallucinated(q)) {
+          const num = String(q.questionNumber || '').trim();
+          const localQ = localMap[num];
+          if (localQ && localQ.options && localQ.options.length >= 2) {
+            return {
+              ...q,
+              questionText: localQ.questionText,
+              options: localQ.options,
+              type: localQ.type || q.type || 'mcq'
+            };
+          }
+        }
+        return q;
+      });
+    }
+
+    return parsedJSON;
   }
 
   /**
@@ -1878,7 +1987,7 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
       q.options.every(opt => {
         const t = String(opt.text || '').trim();
         const k = String(opt.key || '').trim();
-        return t === k || /^[1-4]$/.test(t) || t.length === 0;
+        return t === k || /^[1-4]$/.test(t) || t.length === 0 || /^option\s*[1-4a-d]?\s*(?:text)?$/i.test(t);
       });
 
     if (isDummyOptions && q.questionText) {
