@@ -1185,9 +1185,9 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
           attemptedKeyIds.length = 0;
           continue;
         } else {
-          throw lastError
-            ? this.finalizeApiError(lastError, `Batch ${batchNum} extraction failed.`)
-            : new Error('No active API keys available. Please check API Key Settings.');
+          // Let the bounded retry policy below handle exhausted transient attempts.
+          if (lastError) break;
+          throw new Error('No active API keys available. Please check API Key Settings.');
         }
       }
 
@@ -1901,9 +1901,9 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
           attemptedKeyIds.length = 0;
           continue;
         } else {
-          throw lastError
-            ? this.finalizeApiError(lastError, `Visual batch ${batchNum} extraction failed.`)
-            : new Error('No active API keys available. Please check API Key Settings.');
+          // Let the bounded retry policy below handle exhausted transient attempts.
+          if (lastError) break;
+          throw new Error('No active API keys available. Please check API Key Settings.');
         }
       }
 
