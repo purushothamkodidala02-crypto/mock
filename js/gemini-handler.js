@@ -458,6 +458,16 @@ class GeminiHandler {
     }
   }
 
+  getCandidateModels(primaryModel, additionalModels = []) {
+    const highThroughputFallbacks = [
+      'gemini-3.5-flash-lite',
+      'gemini-2.5-flash-lite',
+      'gemini-3.1-flash-lite',
+      'gemini-2.5-flash'
+    ];
+    return [...new Set([primaryModel, ...highThroughputFallbacks, ...additionalModels].filter(Boolean))];
+  }
+
   createApiError(status, message, context = '') {
     const rawMessage = String(message || 'Unknown Gemini API error');
     const lower = rawMessage.toLowerCase();
@@ -867,7 +877,7 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
    * Prioritizes page boundaries (2 pages per batch) so questions are never fragmented,
    * never omitted, and never exceed Gemini's output generation window.
    */
-  splitTextIntoBatches(rawText, targetBatchSize = 12, pagesPerBatch = 4) {
+  splitTextIntoBatches(rawText, targetBatchSize = 12, pagesPerBatch = 12) {
     if (!rawText || typeof rawText !== 'string') return [rawText || ''];
 
     // STRATEGY 1: Split by page markers (--- [Page X] ---)
@@ -1026,7 +1036,7 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
         .join('\n\n');
 
       // 1 page per batch guarantees 100% question extraction without skipping complex pages
-      const textBatches = this.splitTextIntoBatches(textContent, 12, 4);
+      const textBatches = this.splitTextIntoBatches(textContent, 12, 12);
       const totalTextBatches = textBatches.length;
       progress(`⚡ Digitizing ${textPagesWithContent.length} text pages across ${totalTextBatches} fast AI batches...`, 20);
 
@@ -1151,11 +1161,9 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
    */
   async extractSingleTextBatch(batchText, batchNum, totalBatches, onProgress = null, retryAttempt = 1) {
     const promptText = `${this.buildExtractionPrompt(`Batch ${batchNum} of ${totalBatches}`)}\n\n<document_content>\n${batchText}\n</document_content>\n\nTRANSCRIBE ALL QUESTIONS FROM THE ABOVE DOCUMENT CONTENT FAITHFULLY.`;
-    const primaryModel = this.getModelName();
-    const candidateModels = [
-      primaryModel,
-      ...this.supportedModels.map(m => m.id).filter(id => id !== primaryModel)
-    ];
+    const selectedModel = this.getModelName();
+    const primaryModel = totalBatches > 1 ? 'gemini-3.5-flash-lite' : selectedModel;
+    const candidateModels = this.getCandidateModels(primaryModel, [selectedModel]);
 
     const attemptedKeyIds = [];
     let lastError = null;

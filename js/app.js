@@ -283,12 +283,22 @@ class AppController {
     const totalElem = document.getElementById('modal-stat-total');
     const tabCountElem = document.getElementById('tab-keys-count');
     const stratElem = document.getElementById('modal-stat-strategy');
+    const navCountElem = document.getElementById('nav-keys-count');
+    const navDotElem = document.getElementById('nav-key-status-dot');
 
     if (activeElem) activeElem.textContent = summary.active || 0;
     if (cooldownElem) cooldownElem.textContent = summary.cooldown || 0;
     if (totalElem) totalElem.textContent = summary.total || 0;
     if (tabCountElem) tabCountElem.textContent = summary.total || 0;
     if (stratElem) stratElem.textContent = summary.strategy === 'round_robin' ? 'Round-Robin' : 'Auto-Failover';
+    if (navCountElem) navCountElem.textContent = `${summary.total || 0} Key${summary.total === 1 ? '' : 's'} Pool`;
+    if (navDotElem) {
+      navDotElem.classList.remove('bg-emerald-500', 'bg-amber-500', 'bg-red-500', 'bg-slate-400');
+      if (summary.active > 0) navDotElem.classList.add('bg-emerald-500');
+      else if (summary.cooldown > 0) navDotElem.classList.add('bg-amber-500');
+      else if (summary.total > 0) navDotElem.classList.add('bg-red-500');
+      else navDotElem.classList.add('bg-slate-400');
+    }
 
     this.updateFilePreviewKeyStatus();
   }

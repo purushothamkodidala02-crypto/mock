@@ -304,7 +304,7 @@ const longPaperText = Array.from({ length: 57 }, (_, i) =>
   `--- [Page ${i + 1}] ---\nQuestion content for page ${i + 1}`
 ).join('\n');
 const optimizedBatches = geminiHandler.splitTextIntoBatches(longPaperText);
-assert.strictEqual(optimizedBatches.length, 15, '57 text pages should use 15 grouped batches, not 57 requests');
+assert.strictEqual(optimizedBatches.length, 5, '57 text pages should use 5 grouped batches, not 57 requests');
 for (let page = 1; page <= 57; page++) {
   assert.ok(optimizedBatches.some(batch => batch.includes(`[Page ${page}]`)), `Page ${page} must remain covered`);
 }
@@ -329,4 +329,8 @@ browserAbort.code = 20;
 const normalizedAbort = geminiHandler.normalizeThrownError(browserAbort);
 assert.strictEqual(normalizedAbort.code, 'GEMINI_NETWORK');
 assert.ok(geminiHandler.finalizeApiError(normalizedAbort).message.includes('timed out'));
+const throughputModels = geminiHandler.getCandidateModels('gemini-3.5-flash-lite', ['gemini-3.7-flash']);
+assert.strictEqual(throughputModels[0], 'gemini-3.5-flash-lite');
+assert.ok(throughputModels.includes('gemini-2.5-flash-lite'));
+assert.strictEqual(new Set(throughputModels).size, throughputModels.length);
 console.log('Gemini error classification regression checks passed.');
