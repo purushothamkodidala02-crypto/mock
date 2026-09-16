@@ -780,7 +780,7 @@ class AppController {
 
     this.showProgress(`Loading sample: ${sample.title}...`, 50);
     setTimeout(() => {
-      const extracted = window.extractorEngine.extract(sample.text, { images: sample.images || [] });
+      const extracted = sample.data ? JSON.parse(JSON.stringify(sample.data)) : window.extractorEngine.extract(sample.text, { images: sample.images || [] });
       this.hideProgress();
       this.renderExtractedPaper(extracted);
     }, 150);

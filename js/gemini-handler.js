@@ -710,11 +710,13 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
           }
         }
 
-        // Check for corrupted PUA font encoding in text pages
+        // Check for corrupted PUA font encoding or Mojibake in text pages
         const fullTextSample = textPages.map(p => pageTexts[p - 1] || '').join('\n');
         const puaMatches = fullTextSample.match(/(?:[\uE000-\uF8FF\uFFF0-\uFFFF]|[\uDB80-\uDBFF][\uDC00-\uDFFF])/g) || [];
-        if (puaMatches.length >= 10) {
-          progress(`👁️ Custom / Non-Unicode font detected (${puaMatches.length} unmapped glyphs). Switching to Gemini Multimodal Vision to visually read authentic regional script...`, 20);
+        const needsVision = isBilingualExam || mojibakeMatches.length >= 5 || puaMatches.length >= 10;
+
+        if (needsVision) {
+          progress(`👁️ Complex bilingual layout / font encoding detected. Switching to Gemini Multimodal Vision for 100% fidelity...`, 20);
           return this.extractDirectPDF(fileOrBuffer, options, progress);
         }
 
@@ -1805,9 +1807,9 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
       targetPages = this.parsePageRangeString(options.customRange, totalPages);
     }
 
-    // If PDF has > 3 pages, batch by 3 pages for fast visual processing
-    if (targetPages.length > 3 && window.pdfHandler && typeof window.pdfHandler.renderPagesToJPEGs === 'function') {
-      const pagesPerBatch = 3;
+    // If PDF has > 2 pages, batch by 2 pages for high visual accuracy & zero truncation
+    if (targetPages.length > 2 && window.pdfHandler && typeof window.pdfHandler.renderPagesToJPEGs === 'function') {
+      const pagesPerBatch = 2;
       const batches = [];
       for (let i = 0; i < targetPages.length; i += pagesPerBatch) {
         batches.push(targetPages.slice(i, i + pagesPerBatch));
