@@ -1,0 +1,15 @@
+#mock-studio { width: min(1150px, 96vw); max-height: 94vh; border: 0; border-radius: 18px; padding: 24px; color: #17233b; background: #f8fafc; font-family: system-ui, sans-serif; }
+#mock-studio, #mock-studio * { box-sizing: border-box; }
+#mock-blueprint-summary { max-height: 280px; overflow: auto; }
+#mock-studio::backdrop { background: #0f172a99; }
+#mock-studio h2 { font-size: 24px; font-weight: 750; } #mock-studio h3 { font-size: 18px; font-weight: 700; margin-bottom: 12px; }
+#mock-studio section { padding: 18px; margin: 16px 0; border: 1px solid #dce3ef; border-radius: 12px; background: white; }
+#mock-studio label { display: block; font-weight: 600; font-size: 13px; margin: 8px 0; }
+#mock-studio input:not([type=checkbox]), #mock-studio select, #mock-studio textarea { display: block; width: 100%; border: 1px solid #aab8cf; border-radius: 7px; padding: 9px; background: white; font-weight: 400; color: #17233b; }
+#mock-studio textarea { min-height: 90px; } #mock-studio button, #mock-studio .file-label { padding: 9px 13px; background: #3730a3; color: white; border-radius: 7px; margin: 4px 5px 4px 0; cursor: pointer; font-size: 13px; font-weight: 600; }
+#mock-studio button:disabled { opacity: .45; cursor: wait; } #mock-studio .secondary { background: #e2e8f0; color: #17233b; }
+#mock-studio .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+#mock-studio .note { font-size: 13px; color: #526079; margin: 8px 0; } #mock-status { white-space: pre-wrap; padding: 12px; background: #e0e7ff; border-radius: 8px; position: sticky; top: 0; z-index: 1; }
+#mock-studio .paper-list { max-height: 190px; overflow: auto; } #mock-studio summary { cursor: pointer; font-weight: 650; padding: 8px 0; }
+#mock-studio .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; } #mock-studio .question-card { padding: 12px; border-top: 1px solid #dce3ef; }
+#mock-studio table { width: 100%; font-size: 13px; border-collapse: collapse; } #mock-studio th, #mock-studio td { padding: 6px; text-align: left; border-bottom: 1px solid #dce3ef; }

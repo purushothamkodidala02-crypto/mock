@@ -1,0 +1,27 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Mock Builder isolated browser checks</title>
+<link rel="stylesheet" href="css/mock-builder.css"><body><h1>Mock Builder isolated browser checks</h1>
+<p>This test uses a separate database and simulated AI. It does not access API keys or change your paper vault.</p>
+<button id="start">Prepare isolated UI fixture</button><pre id="result"></pre>
+<script src="js/mock-builder.js"></script><script src="js/mock-xlsx.js"></script><script src="js/mock-studio.js"></script>
+<script>
+window.paperVault = { getAllPapers: async () => [], getPastReports: async () => [] };
+const fixtureStore = new MockStore('MockBuilderBrowserTest');
+window.mockStudio.builder = new MockBuilder(fixtureStore);
+window.mockStudio.builder.json = async prompt => {
+  if (prompt.startsWith('Independently')) return { checks: [{ slot: 1, valid: true }] };
+  return { questions: [{ slot: 1, semantic_key: 'recognize noun among adjectives and adverbs', question_en: 'Which word is a noun?', option_a_en: 'Table', option_b_en: 'Quickly', option_c_en: 'Very', option_d_en: 'Beautiful', correct_answer: 'A', explanation_en: 'Table names an object and is a noun.' }] };
+};
+document.getElementById('start').onclick = async () => {
+  try {
+    let state = await fixtureStore.read();
+    if (!state.blueprints.length) {
+      state.blueprints.push({ id: 'test_bp', title: 'Browser test English', version: 1, status: 'ready', createdAt: new Date().toISOString(), sourceIds: [], sourceTitles: ['Simulated fixture'], processed: 1, rows: [{ subject: 'English', topic: 'Parts of speech', style: 'Direct recall', depth: 'Identify a noun', difficulty: 'easy', weight: 1 }] });
+      await fixtureStore.lock(() => fixtureStore.write(state));
+    }
+    const reread = await new MockStore('MockBuilderBrowserTest').read();
+    if (!reread.blueprints.some(b => b.id === 'test_bp')) throw Error('IndexedDB persistence failed');
+    document.getElementById('result').textContent = 'PASS: real IndexedDB read/write and Web Locks. Use 1 question for the simulated generation.';
+    await window.mockStudio.open();
+  } catch (error) { document.getElementById('result').textContent = error.stack; }
+};
+</script></body></html>

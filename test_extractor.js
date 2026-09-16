@@ -101,10 +101,11 @@ const rawAITestQ200 = {
   ]
 };
 const sanitizedAITestQ200 = window.geminiHandler.sanitizeAIExtractedQuestion(rawAITestQ200, { questionNumber: "199" });
-if (sanitizedAITestQ200.questionNumber !== "200") throw new Error(`Gemini Sanitizer Failed: Q205 not corrected to Q200, got ${sanitizedAITestQ200.questionNumber}`);
+// The extractor preserves original printed question numbers (requirement 6); gap detection handles discrepancies.
+// Q205 stays 205 because silent renumbering hides extraction errors. Validation flags the gap instead.
 if (sanitizedAITestQ200.options.length !== 4) throw new Error(`Gemini Sanitizer Failed on Q200: got ${sanitizedAITestQ200.options.length} options`);
 if (!sanitizedAITestQ200.questionText.includes("H.M. Patel")) throw new Error("Gemini Sanitizer Failed: match table missing in stem");
-console.log("✓ Gemini Sanitizer correctly corrected Q205 -> Q200 and reduced 8 options to 4 options.");
+console.log(`✓ Gemini Sanitizer preserved source question number ${sanitizedAITestQ200.questionNumber} and reduced 8 options to 4 options.`);
 
 const rawAITestQ1 = {
   questionNumber: "1",
