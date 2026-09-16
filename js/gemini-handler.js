@@ -486,8 +486,9 @@ class GeminiHandler {
   }
 
   normalizeThrownError(error) {
-    if (error?.code) return error;
-    if (error?.name === 'AbortError') {
+    if (typeof error?.code === 'string' && error.code.startsWith('GEMINI_')) return error;
+    if (error?.name === 'AbortError' || error?.name === 'TimeoutError' ||
+        /signal is aborted|operation was aborted|request timed out/i.test(String(error?.message || ''))) {
       const timeoutError = new Error('The Gemini request timed out.');
       timeoutError.code = 'GEMINI_NETWORK';
       return timeoutError;
@@ -1202,7 +1203,7 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
           };
 
           const timeoutController = new AbortController();
-          const timeoutId = setTimeout(() => timeoutController.abort(), 45000); // 45s per batch
+          const timeoutId = setTimeout(() => timeoutController.abort(), 90000); // 90s per text batch
 
           const response = await fetch(url, {
             method: 'POST',
@@ -1785,7 +1786,7 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
           };
 
           const timeoutController = new AbortController();
-          const timeoutId = setTimeout(() => timeoutController.abort(), 60000);
+          const timeoutId = setTimeout(() => timeoutController.abort(), 120000);
 
           const response = await fetch(url, {
             method: 'POST',
@@ -1916,7 +1917,7 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
           };
 
           const timeoutController = new AbortController();
-          const timeoutId = setTimeout(() => timeoutController.abort(), 60000);
+          const timeoutId = setTimeout(() => timeoutController.abort(), 120000);
 
           const response = await fetch(url, {
             method: 'POST',
@@ -2130,7 +2131,7 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
 
         try {
           const timeoutController = new AbortController();
-          const timeoutId = setTimeout(() => timeoutController.abort(), options.timeoutMs || 120000);
+          const timeoutId = setTimeout(() => timeoutController.abort(), options.timeoutMs || 180000);
           const response = await fetch(
             `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
             {
@@ -2253,7 +2254,7 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
           };
 
           const timeoutController = new AbortController();
-          const timeoutId = setTimeout(() => timeoutController.abort(), 60000);
+          const timeoutId = setTimeout(() => timeoutController.abort(), 90000);
 
           const response = await fetch(url, {
             method: 'POST',
