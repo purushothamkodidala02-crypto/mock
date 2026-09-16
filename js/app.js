@@ -2686,9 +2686,6 @@ class AppController {
 
       this.currentAnalysisReport = report;
 
-      // Save to vault for history
-      await window.paperVault.saveAnalysisReport(report);
-
       // Update modal header
       if (titleElem) {
         titleElem.textContent = `${report.executiveBlueprint?.examTitle || 'Exam'} Blueprint & Pattern Discovery`;

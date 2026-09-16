@@ -633,8 +633,9 @@ class PaperVault {
   async clearVault() {
     await this.initPromise;
     if (this.db) {
-      const tx = this.db.transaction([this.storeName], 'readwrite');
-      tx.objectStore(this.storeName).clear();
+      const stores = [this.storeName, this.analysisStoreName].filter(name => this.db.objectStoreNames.contains(name));
+      const tx = this.db.transaction(stores, 'readwrite');
+      stores.forEach(name => tx.objectStore(name).clear());
     }
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem('paper_vault_items');
@@ -662,11 +663,17 @@ class PaperVault {
       allPapers = this.fallbackGetAllFull();
     }
 
+    const analyses = await this.getPastReports();
+    const folders = await this.getCustomFolders();
+
     const backup = {
-      exportVersion: '1.0',
+      exportVersion: '2.0',
       exportedAt: new Date().toISOString(),
       count: allPapers.length,
-      papers: allPapers
+      analysisCount: analyses.length,
+      papers: allPapers,
+      analyses,
+      folders
     };
 
     const jsonStr = JSON.stringify(backup, null, 2);
@@ -700,13 +707,39 @@ class PaperVault {
         if (p && (p.questions || p.sections || p.paperData)) {
           const rawData = p.paperData || p;
           await this.savePaper(rawData, {
+            id: p.id,
             filename: p.filename || rawData.metadata?.title || 'Imported Paper',
-            source: p.source || 'backup_import'
+            source: p.source || 'backup_import',
+            title: p.title,
+            board: p.board,
+            exam: p.exam,
+            year: p.year,
+            paperType: p.paperType,
+            paperCode: p.paperCode,
+            specialization: p.specialization
           });
           imported++;
         }
       }
-      return { success: true, imported };
+
+      let analysesImported = 0;
+      for (const analysisRecord of parsed.analyses || []) {
+        const report = analysisRecord.report || analysisRecord;
+        if (report && (report.executiveBlueprint || report.topicWeightageMatrix)) {
+          await this.saveAnalysisReport({
+            ...report,
+            id: report.id || analysisRecord.id,
+            timestamp: report.timestamp || analysisRecord.timestamp
+          });
+          analysesImported++;
+        }
+      }
+
+      for (const folder of parsed.folders || []) {
+        await this.createFolder(folder);
+      }
+
+      return { success: true, imported, analysesImported };
     } catch (err) {
       console.error('Failed to import vault backup:', err);
       throw err;
@@ -719,8 +752,8 @@ class PaperVault {
   async saveAnalysisReport(reportData) {
     await this.initPromise;
     const record = {
-      id: `analysis_${Date.now()}`,
-      timestamp: Date.now(),
+      id: reportData.id || `analysis_${Date.now()}`,
+      timestamp: reportData.timestamp || Date.now(),
       title: reportData.title || 'Exam Design & Pattern Analysis',
       paperIds: reportData.paperIds || [],
       paperTitles: reportData.paperTitles || [],

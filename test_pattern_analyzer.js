@@ -150,6 +150,9 @@ async function runTests() {
   assert.strictEqual(digest.papers.length, 2);
   assert.ok(digest.papers[0].archetypes.statementQuestions > 0, 'Should detect statement question in Paper 1');
   assert.ok(digest.papers[1].archetypes.numericalQuestions > 0, 'Should detect numerical question in Paper 2');
+  assert.strictEqual(digest.papers[0].questionEvidence.length, 2, 'Digest must retain evidence for every question in Paper 1');
+  assert.strictEqual(digest.papers[1].questionEvidence.length, 1, 'Digest must retain evidence for every question in Paper 2');
+  assert.ok(digest.papers[0].structuralMetrics.cognitiveDepth.analysis > 0, 'Should calculate cognitive depth');
   console.log(`  ✓ Multi-paper digest compiled successfully:`);
   console.log(`     Paper 1 Archetypes:`, digest.papers[0].archetypes);
   console.log(`     Paper 2 Archetypes:`, digest.papers[1].archetypes);
@@ -257,6 +260,42 @@ async function runTests() {
   assert.ok(report.markdownReport.includes('Topic Weightage & Frequency Matrix'), 'Markdown must have topic matrix');
   assert.ok(report.markdownReport.includes('Predictive Next-Exam Blueprint'), 'Markdown must have predictive blueprint');
   console.log(`  ✓ Report successfully standardized and formatted into ${report.markdownReport.length} chars of Markdown.`);
+
+  assert.strictEqual(report.totalPapersAnalyzed, 2, 'Report must expose analyzed paper count to the UI');
+  assert.strictEqual(report.yearsCovered, '2015 - 2016', 'Report must store the covered year range');
+
+  // Test 8B: The dedicated analysis prompt must be sent directly to Gemini.
+  let submittedPrompt = '';
+  const fakeHandler = {
+    hasAnyKey: () => true,
+    getModelName: () => 'gemini-test-model',
+    extractFromText: async () => { throw new Error('Question extraction pipeline must not be used for analysis'); },
+    generateStructuredJSON: async (promptText) => {
+      submittedPrompt = promptText;
+      return { data: mockAIResponse, modelUsed: 'gemini-test-model', keyLabel: 'Test Key' };
+    }
+  };
+  const directAnalyzer = new PaperPatternAnalyzer(fakeHandler);
+  const globalVault = window.paperVault;
+  window.paperVault = null;
+  const directReport = await directAnalyzer.analyzeExamPatterns(
+    [fullPaper1, fullPaper2],
+    { customInstructions: 'Measure question depth' }
+  );
+  window.paperVault = globalVault;
+  assert.ok(submittedPrompt.includes('YOUR TASK:'), 'Gemini must receive the analysis task prompt');
+  assert.ok(submittedPrompt.includes('questionEvidence'), 'Gemini must receive all compact question evidence');
+  assert.ok(submittedPrompt.includes('Measure question depth'), 'Gemini must receive custom analysis instructions');
+  assert.strictEqual(directReport.modelUsed, 'gemini-test-model');
+
+  // Test 8C: Analysis reports must persist and be included in vault backups.
+  await vault.saveAnalysisReport(report);
+  const savedReports = await vault.getPastReports();
+  assert.strictEqual(savedReports.length, 1, 'Analysis report must be stored in the vault');
+  const backup = JSON.parse(await vault.exportVaultBackup());
+  assert.strictEqual(backup.exportVersion, '2.0');
+  assert.strictEqual(backup.analysisCount, 1, 'Vault backup must include analysis reports');
+  assert.strictEqual(backup.analyses[0].id, report.id, 'Stored analysis must preserve its stable ID');
 
   // Test 9: Deletion test
   console.log('\nTest 9: Deleting Paper from Vault...');

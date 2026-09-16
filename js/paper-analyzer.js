@@ -53,11 +53,16 @@ class PaperPatternAnalyzer {
       let numericalQuestions = 0;
       let directRecallQuestions = 0;
       let bilingualQuestions = 0;
+      let negativePhraseQuestions = 0;
+      let totalStemCharacters = 0;
+      const cognitiveDepth = { recall: 0, application: 0, analysis: 0 };
       const detectedTopics = {};
+      const questionEvidence = [];
 
-      questionsList.forEach(q => {
+      questionsList.forEach((q, questionIndex) => {
         const text = q.questionText || '';
         const lower = text.toLowerCase();
+        totalStemCharacters += text.length;
 
         // Archetype classification
         if (/statements?|consider the following|choose the correct/i.test(lower) || /\(a\).*\(b\)/s.test(lower)) {
@@ -75,9 +80,35 @@ class PaperPatternAnalyzer {
           bilingualQuestions++;
         }
 
+        if (/\b(?:not|incorrect|except|false)\b/i.test(lower)) {
+          negativePhraseQuestions++;
+        }
+
+        let depth = 'recall';
+        if (/consider the following|assertion|reason|match the following|which statements?|codes? given below/i.test(lower) ||
+            (text.match(/\([a-d1-4]\)/gi) || []).length >= 2) {
+          depth = 'analysis';
+        } else if (/calculate|evaluate|find|determine|ratio|percent|if\s+.+then|based on|apply/i.test(lower) ||
+                   /\d/.test(text) && /[=+\-*/%]/.test(text)) {
+          depth = 'application';
+        }
+        cognitiveDepth[depth]++;
+
         // Section / Topic aggregation
         const sectionName = q.section || 'General';
         detectedTopics[sectionName] = (detectedTopics[sectionName] || 0) + 1;
+
+        questionEvidence.push({
+          questionNumber: String(q.questionNumber || questionIndex + 1),
+          sourcePage: q.sourcePage || q.pageNumber || '',
+          section: sectionName,
+          depth,
+          stem: text.substring(0, 500),
+          options: (q.options || []).slice(0, 6).map(option => ({
+            key: String(option.key || ''),
+            text: String(option.text || '').substring(0, 180)
+          }))
+        });
       });
 
       // Sample representative questions (take first, middle, and end questions for sampling)
@@ -112,8 +143,16 @@ class PaperPatternAnalyzer {
           directRecallQuestions,
           bilingualQuestions
         },
+        structuralMetrics: {
+          negativePhraseQuestions,
+          averageStemCharacters: questionsList.length > 0
+            ? Math.round(totalStemCharacters / questionsList.length)
+            : 0,
+          cognitiveDepth
+        },
         topicCounts: detectedTopics,
-        sampleQuestions
+        sampleQuestions,
+        questionEvidence
       };
     });
 
@@ -193,6 +232,13 @@ YOUR TASK:
 Perform a deep, analytical examination blueprint and pattern discovery across these question papers.
 Discover HOW this examination is designed, the underlying examiner logic, cognitive difficulty traps, recurring syllabus hotspots, and a predictive blueprint for upcoming exams.
 
+EVIDENCE RULES:
+- Base every conclusion only on the supplied questionEvidence and structuralMetrics.
+- Distinguish observed facts from forecasts. Never present a forecast as certain.
+- Cite supporting paper title/year and question numbers for major pattern claims.
+- If fewer than 3 distinct years are supplied, mark trend and recurrence conclusions as low confidence.
+- Analyze all supplied questions; sampleQuestions are navigation aids only.
+
 Return your analysis as a valid JSON object matching the following structure exactly:
 {
   "executiveBlueprint": {
@@ -258,6 +304,17 @@ Return your analysis as a valid JSON object matching the following structure exa
     ],
     "difficultyTrajectory": "How difficulty and competition have tightened over time"
   },
+  "evidenceAndConfidence": {
+    "overallConfidence": "high | medium | low",
+    "limitations": ["Dataset limitation or extraction caveat"],
+    "keyFindings": [
+      {
+        "finding": "Observed design pattern",
+        "confidence": "high | medium | low",
+        "evidence": ["2022 Paper Q31", "2018 Paper Q44"]
+      }
+    ]
+  },
   "predictiveExamForecast": {
     "expectedTopicDistribution": [
       { "subject": "Subject Name", "expectedQuestions": "45-50", "priority": "Crucial / High / Medium" }
@@ -295,8 +352,9 @@ Return ONLY valid JSON matching this schema. Be thorough, actionable, and mathem
       throw new Error('No active Gemini API keys found. Please open API Key Settings and add a key.');
     }
 
+    const progressCallback = onProgress || options.onProgress;
     const progress = (msg, pct) => {
-      if (typeof onProgress === 'function') onProgress(msg, pct);
+      if (typeof progressCallback === 'function') progressCallback(msg, pct);
     };
 
     progress('Compiling multi-year question paper digest...', 15);
@@ -312,22 +370,28 @@ Return ONLY valid JSON matching this schema. Be thorough, actionable, and mathem
     const model = options.model || handler.getModelName() || 'gemini-2.5-flash';
     progress(`Discovering exam design logic & patterns with ${model}...`, 50);
 
-    // Call Gemini API via Text extraction pipeline
-    const rawResult = await handler.extractFromText(
-      JSON.stringify(digest),
-      'multi_paper_digest.json',
-      (msg, p) => progress(msg, 50 + Math.round((p / 100) * 40))
+    if (typeof handler.generateStructuredJSON !== 'function') {
+      throw new Error('The installed Gemini handler does not support structured pattern analysis. Reload the latest application build.');
+    }
+
+    const aiResponse = await handler.generateStructuredJSON(
+      promptText,
+      { model, temperature: 0.1, maxOutputTokens: 65536, timeoutMs: 180000 },
+      (msg, p) => progress(msg, Math.min(92, p || 50))
     );
 
     progress('Synthesizing exam blueprint & predictive report...', 95);
 
     // Standardize result
-    const standardized = this.standardizeAnalysisOutput(rawResult, digest, papers);
+    const standardized = this.standardizeAnalysisOutput(aiResponse.data, digest, papers);
+    standardized.modelUsed = aiResponse.modelUsed;
+    standardized.analysisVersion = 2;
 
     // Save report to PaperVault if available
     if (typeof window !== 'undefined' && window.paperVault) {
       try {
-        await window.paperVault.saveAnalysisReport(standardized);
+        const saved = await window.paperVault.saveAnalysisReport(standardized);
+        standardized.storageId = saved.id;
       } catch (e) {
         console.warn('Could not auto-save analysis report:', e);
       }
@@ -373,11 +437,27 @@ Return ONLY valid JSON matching this schema. Be thorough, actionable, and mathem
       paperIds: ids,
       paperTitles: titles,
       totalPapers: originalPapers.length,
+      totalPapersAnalyzed: originalPapers.length,
+      yearsCovered: digest.yearRange,
+      sourceSummary: {
+        yearRange: digest.yearRange,
+        distribution: digest.distribution,
+        papers: digest.papers.map(paper => ({
+          id: paper.id,
+          title: paper.title,
+          year: paper.year,
+          totalQuestions: paper.totalQuestions,
+          archetypes: paper.archetypes,
+          structuralMetrics: paper.structuralMetrics,
+          topicCounts: paper.topicCounts
+        }))
+      },
       executiveBlueprint: bp,
       difficultyDistribution: data.difficultyDistribution || {},
       topicWeightageMatrix: data.topicWeightageMatrix || [],
       questionDesignAndTraps: data.questionDesignAndTraps || {},
       yearOverYearEvolution: data.yearOverYearEvolution || {},
+      evidenceAndConfidence: data.evidenceAndConfidence || {},
       predictiveExamForecast: data.predictiveExamForecast || {},
       actionableStudyStrategy: data.actionableStudyStrategy || {},
       raw: data
@@ -398,6 +478,7 @@ Return ONLY valid JSON matching this schema. Be thorough, actionable, and mathem
     const topics = report.topicWeightageMatrix || [];
     const traps = report.questionDesignAndTraps || {};
     const evo = report.yearOverYearEvolution || {};
+    const confidence = report.evidenceAndConfidence || {};
     const forecast = report.predictiveExamForecast || {};
     const strategy = report.actionableStudyStrategy || {};
 
@@ -491,6 +572,16 @@ ${(forecast.top10MustMasterHotspots || []).map((h, i) => `${i + 1}. **${h}**`).j
 ### Critical Candidate Do's & Don'ts
 - **DO:** ${(strategy.criticalPreparationDoAndDonts?.dos || []).join(', ')}
 - **DON'T:** ${(strategy.criticalPreparationDoAndDonts?.donts || []).join(', ')}
+
+---
+
+## 8. Evidence & Confidence
+
+**Overall confidence:** ${confidence.overallConfidence || 'Not stated'}
+
+${(confidence.keyFindings || []).map(item => `- **${item.finding}** (${item.confidence || 'unspecified'} confidence) — Evidence: ${(item.evidence || []).join(', ') || 'Not supplied'}`).join('\n')}
+
+${(confidence.limitations || []).length ? `**Limitations:**\n${confidence.limitations.map(item => `- ${item}`).join('\n')}` : ''}
 
 ---
 *Generated by PaperExtract Studio & Gemini AI Intelligence Engine*

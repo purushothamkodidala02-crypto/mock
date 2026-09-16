@@ -2088,6 +2088,102 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
   }
 
   /**
+   * Runs a general structured-JSON Gemini task without applying the question
+   * extraction prompt or question-paper standardizer.
+   */
+  async generateStructuredJSON(promptText, options = {}, onProgress = null) {
+    if (!this.hasAnyKey()) {
+      throw new Error('No Gemini API keys found. Please add a Gemini API key.');
+    }
+
+    const primaryModel = options.model || this.getModelName();
+    const candidateModels = [
+      primaryModel,
+      ...this.supportedModels.map(model => model.id).filter(id => id !== primaryModel)
+    ];
+    const attemptedKeyIds = [];
+    const maxKeyAttempts = Math.max(this.keyManager.getAllKeys().length * 2, 3);
+    let lastError = null;
+
+    for (let keyAttempt = 0; keyAttempt < maxKeyAttempts; keyAttempt++) {
+      const keySelection = this.keyManager.getNextKey(attemptedKeyIds);
+      if (!keySelection.key) {
+        if (keySelection.allCooling) {
+          const waitSeconds = keySelection.retryAfterSeconds || 15;
+          if (onProgress) onProgress(`All API keys are cooling down. Retrying in ${waitSeconds}s...`, 45);
+          await new Promise(resolve => setTimeout(resolve, Math.min(waitSeconds * 1000, 10000)));
+          attemptedKeyIds.length = 0;
+          continue;
+        }
+        throw lastError
+          ? this.finalizeApiError(lastError, 'Gemini analysis failed.')
+          : new Error('No active API keys available. Please check API Key Settings.');
+      }
+
+      const currentKey = keySelection.key;
+      attemptedKeyIds.push(currentKey.id);
+      this.keyManager.recordUsage(currentKey.id);
+
+      for (let modelIndex = 0; modelIndex < candidateModels.length; modelIndex++) {
+        const model = candidateModels[modelIndex];
+        if (onProgress) onProgress(`Analyzing with ${model} via [${currentKey.label}]...`, 50 + modelIndex * 5);
+
+        try {
+          const timeoutController = new AbortController();
+          const timeoutId = setTimeout(() => timeoutController.abort(), options.timeoutMs || 120000);
+          const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-goog-api-key': currentKey.key
+              },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: promptText }] }],
+                generationConfig: {
+                  responseMimeType: 'application/json',
+                  temperature: options.temperature ?? 0.1,
+                  maxOutputTokens: options.maxOutputTokens || 65536
+                }
+              }),
+              signal: timeoutController.signal
+            }
+          );
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            const errorMessage = errorData.error?.message || `HTTP ${response.status} ${response.statusText}`;
+            lastError = this.createApiError(response.status, errorMessage, `Model ${model}`);
+            if (lastError.code === 'GEMINI_QUOTA') {
+              this.keyManager.recordRateLimit(currentKey.id, 60000, errorMessage);
+              break;
+            }
+            if (lastError.code === 'GEMINI_AUTH') {
+              this.keyManager.recordError(currentKey.id, errorMessage);
+              break;
+            }
+            continue;
+          }
+
+          const payload = await response.json();
+          const rawText = payload.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (!rawText) throw new Error(`Gemini model ${model} returned empty content.`);
+          const cleaned = rawText.replace(/^```json\s*/i, '').replace(/\s*```$/, '').trim();
+          const parsed = JSON.parse(cleaned);
+          this.keyManager.recordSuccess(currentKey.id);
+          return { data: parsed, modelUsed: model, keyLabel: currentKey.label };
+        } catch (error) {
+          lastError = this.normalizeThrownError(error);
+        }
+      }
+    }
+
+    throw this.finalizeApiError(lastError, 'Gemini analysis failed.');
+  }
+
+  /**
    * Fast Text-First Gemini Extraction for a single block
    */
   async extractFromText(rawText, fileName = 'question_paper.txt', onProgress = null) {
