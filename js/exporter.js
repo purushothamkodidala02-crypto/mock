@@ -29,11 +29,29 @@ class ExporterEngine {
   }
 
   /**
-   * Export to CSV Format
+   * Export to CSV Format with UTF-8 BOM for Microsoft Excel compatibility
+   * Preserves Telugu and regional Unicode without mojibake
    */
   exportCSV(examData) {
+    const escapeCSV = (val) => {
+      const s = String(val ?? '');
+      return `"${s.replace(/"/g, '""')}"`;
+    };
+
     const rows = [
-      ['Question Number', 'Section', 'Type', 'Question Text', 'Option A', 'Option B', 'Option C', 'Option D', 'Correct Answer', 'Marks']
+      [
+        escapeCSV('Question Number'),
+        escapeCSV('Page'),
+        escapeCSV('Section'),
+        escapeCSV('Type'),
+        escapeCSV('Question Text'),
+        escapeCSV('Option A'),
+        escapeCSV('Option B'),
+        escapeCSV('Option C'),
+        escapeCSV('Option D'),
+        escapeCSV('Correct Answer'),
+        escapeCSV('Marks')
+      ]
     ];
 
     (examData.sections || []).forEach(sec => {
@@ -43,23 +61,27 @@ class ExporterEngine {
         const optC = q.options?.find(o => o.key === 'C' || o.key === '3')?.text || q.options?.[2]?.text || '';
         const optD = q.options?.find(o => o.key === 'D' || o.key === '4')?.text || q.options?.[3]?.text || '';
 
+        const pageRef = q.sourcePage || q.pageNumber || q.pageRange || '';
+
         rows.push([
-          q.questionNumber || '',
-          sec.title || '',
-          q.type || '',
-          `"${(q.questionText || '').replace(/"/g, '""')}"`,
-          `"${optA.replace(/"/g, '""')}"`,
-          `"${optB.replace(/"/g, '""')}"`,
-          `"${optC.replace(/"/g, '""')}"`,
-          `"${optD.replace(/"/g, '""')}"`,
-          q.correctAnswer || '',
-          q.marks || 1
+          escapeCSV(q.questionNumber || ''),
+          escapeCSV(pageRef),
+          escapeCSV(sec.title || ''),
+          escapeCSV(q.type || ''),
+          escapeCSV(q.questionText || ''),
+          escapeCSV(optA),
+          escapeCSV(optB),
+          escapeCSV(optC),
+          escapeCSV(optD),
+          escapeCSV(q.correctAnswer || ''),
+          escapeCSV(q.marks ?? 1)
         ]);
       });
     });
 
-    const csvContent = rows.map(r => r.join(',')).join('\n');
-    const filename = `${this.slugify(examData.metadata.subject || 'question_paper')}_questions.csv`;
+    // Prepend UTF-8 Byte Order Mark (\uFEFF) so Excel natively detects UTF-8 Telugu characters
+    const csvContent = '\uFEFF' + rows.map(r => r.join(',')).join('\r\n');
+    const filename = `${this.slugify(examData.metadata?.subject || 'question_paper')}_questions.csv`;
     this.downloadFile(csvContent, filename, 'text/csv');
   }
 
@@ -327,3 +349,8 @@ class ExporterEngine {
 }
 
 window.exporterEngine = new ExporterEngine();
+window.ExporterEngine = ExporterEngine;
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { ExporterEngine };
+}

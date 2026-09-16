@@ -58,12 +58,24 @@ class PDFHandler {
 
     for (let pageNum = 1; pageNum <= numPages; pageNum++) {
       if (callback) {
-        callback({
+        const pct = Math.round((pageNum / numPages) * 100);
+        const statusMsg = `Extracting PDF Page ${pageNum} of ${numPages}...`;
+        const progressObj = {
           current: pageNum,
           total: numPages,
-          percent: Math.round((pageNum / numPages) * 100),
-          status: `Extracting PDF Page ${pageNum} of ${numPages}...`
-        });
+          percent: pct,
+          status: statusMsg
+        };
+        // Normalize callback invocation for both object (p) => {} and (msg, pct) => {} callers
+        try {
+          callback(progressObj, pct);
+        } catch (_) {
+          try {
+            callback(statusMsg, pct);
+          } catch (e) {
+            console.warn('Progress callback error:', e);
+          }
+        }
       }
 
       const page = await pdfDoc.getPage(pageNum);
@@ -91,10 +103,96 @@ class PDFHandler {
 
     return {
       text: fullText,
+      fullText: fullText, // Backward compatibility for callers accessing .fullText
       numPages: numPages,
       pageTexts: pageTexts,
       images: allImages,
       imagesByPage: imagesByPage
+    };
+  }
+
+  /**
+   * Assesses the quality and reliability of extracted PDF page text.
+   * Replaces primitive character-length checks with holistic quality validation:
+   * - Identifies Latin-1 mojibake (e.g. à°, à± in Telugu)
+   * - Detects Private Use Area (PUA) unmapped font symbols
+   * - Detects scrambled canvas drawing order (option numbers interleaved into sentences)
+   * - Identifies complex math equations prone to fraction-bar loss in text layers
+   * - Flags scanned/empty pages
+   *
+   * @param {string} pageText
+   * @returns {{ isReliable: boolean, score: number, reasons: string[], hasMath: boolean, hasBilingual: boolean, isScanned: boolean }}
+   */
+  assessPageTextQuality(pageText) {
+    if (!pageText || typeof pageText !== 'string') {
+      return { isReliable: false, score: 0, reasons: ['empty_content'], hasMath: false, hasBilingual: false, isScanned: true };
+    }
+
+    const trimmed = pageText.trim();
+    if (trimmed.length < 40) {
+      return { isReliable: false, score: 0, reasons: ['minimal_text_or_scanned'], hasMath: false, hasBilingual: false, isScanned: true };
+    }
+
+    const reasons = [];
+
+    // 1. Mojibake detection (UTF-8 bytes decoded as Latin-1 / Windows-1252)
+    // Telugu / Indic: à°, à±, à¤, à¥, à¦, à§, etc.
+    const mojibakeMatches = trimmed.match(/(?:à[°±²³´µ¶·¸¹º»¼½¾¿]|à[¤¥¦§®¯]|Ã[¢©—]|â[€™€œ"•])/g) || [];
+    // Private Use Area (PUA) unmapped font encodings
+    const puaMatches = trimmed.match(/(?:[\uE000-\uF8FF\uFFF0-\uFFFF]|[\uDB80-\uDBFF][\uDC00-\uDFFF]|\uFFFD)/g) || [];
+    
+    if (mojibakeMatches.length >= 3) {
+      reasons.push(`mojibake_encoding_corruption_${mojibakeMatches.length}`);
+    }
+    if (puaMatches.length >= 3) {
+      reasons.push(`unmapped_pua_fonts_${puaMatches.length}`);
+    }
+
+    // 2. Scrambled reading order / interleaved layout detection
+    // E.g. Question number appearing after a word inside a sentence: "teacher 3. (1) are" or "socks 1. (1) has"
+    const midSentenceQNums = trimmed.match(/[a-z]{3,}\s+\d+[\.\)]\s+(?:\([1-4a-dA-D]\)|[1-4][\.\)])/g) || [];
+    // Or multiple option numbers immediately preceding stem predicate words: "(1) has (2) have... been missing"
+    const optionsFollowedByStem = trimmed.match(/(?:\([1-4]\)\s+\w+\s+){2,}(?:been|completed|implement|yesterday|tomorrow|because|which|where|from\s+my)\b/i) || [];
+    if (midSentenceQNums.length > 0 || optionsFollowedByStem.length > 0) {
+      reasons.push(`scrambled_reading_order_interleaved_${midSentenceQNums.length + optionsFollowedByStem.length}`);
+    }
+
+    // 3. Complex mathematical layouts
+    // In PDF text layers, fractions lose their horizontal bar and square roots lose radicals.
+    const mathIndicators = trimmed.match(/(?:\\frac|\b(?:LCM|HCF)\b|[\d]+\s*of\s*[-+]+\s*[\d]+|\b\d+\s*[\+\-\*\/=]\s*4\^[A-Za-z0-9]|\b\d+\s*[\/÷]\s*\d+\s*=\s*|\b\d+\s*\\overline|\b\d+\s*-\s*à°¸à±†à°•à°‚à°¡à±|[\d\.\^]+\s*[\+\*x×]\s*[\d\.\^]+\s*=\s*[a-zA-Z0-9\^]+)/g) || [];
+    const hasMath = mathIndicators.length >= 2 || /\\(?:frac|sqrt|times|div|pm)/.test(trimmed);
+    if (hasMath) {
+      // Check if text has broken arithmetic tokens e.g. "of -+ 6" or missing operators
+      const brokenMathTokens = trimmed.match(/of\s*[-+]+\s*\d+|\d+\s*[\+\-]\s*=\s*4\^/g) || [];
+      if (brokenMathTokens.length > 0 || mojibakeMatches.length > 0) {
+        reasons.push('complex_math_layout_distortion');
+      }
+    }
+
+    // 4. Broken short-token ratio (text layer emitting 1-2 char fragments per line)
+    const lines = trimmed.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length > 15) {
+      const veryShortLines = lines.filter(l => l.length <= 3).length;
+      if (veryShortLines / lines.length > 0.4) {
+        reasons.push('fragmented_canvas_text_stream');
+      }
+    }
+
+    // 5. Genuine regional Telugu / Indic text detection
+    const teluguMatches = trimmed.match(/[\u0C00-\u0C7F]/g) || [];
+    const hasBilingual = teluguMatches.length >= 10 || mojibakeMatches.length >= 3;
+
+    const isReliable = reasons.length === 0;
+    const penalty = reasons.length * 30 + mojibakeMatches.length * 5 + puaMatches.length * 5;
+    const score = Math.max(0, Math.min(100, 100 - penalty));
+
+    return {
+      isReliable,
+      score,
+      reasons,
+      hasMath: hasMath || mathIndicators.length > 0,
+      hasBilingual,
+      isScanned: false
     };
   }
 
@@ -265,8 +363,9 @@ class PDFHandler {
 
   /**
    * Renders multiple pages of a PDF to raw base64 JPEG images for Gemini Vision
+   * Uses high-resolution scale (2.0 = ~150-200 DPI) for crisp KaTeX math formulas and regional scripts
    */
-  async renderPagesToJPEGs(fileOrBuffer, pageNumbers = [], scale = 1.5, onProgress = null) {
+  async renderPagesToJPEGs(fileOrBuffer, pageNumbers = [], scale = 2.0, onProgress = null) {
     if (!this.pdfjsLib) {
       this.pdfjsLib = window['pdfjs-dist/build/pdf'] || window.pdfjsLib;
     }
@@ -296,7 +395,7 @@ class PDFHandler {
         const ctx = canvas.getContext('2d');
 
         await page.render({ canvasContext: ctx, viewport }).promise;
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
         results.push({
           pageNum: pNum,
           base64: dataUrl.split(',')[1]

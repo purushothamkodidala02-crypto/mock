@@ -714,10 +714,19 @@ class AppController {
         rawText = pdfResult.text;
         extractedImages = pdfResult.images || [];
 
-        // If PDF had minimal text layer (scanned PDF), alert OCR fallback
-        if (!rawText || rawText.trim().length < 50) {
-          this.showProgress('PDF text layer empty. Attempting OCR on scanned pages...', 60);
-          rawText = "Please upload pages as JPG or PNG images for OCR extraction.";
+        // Evaluate PDF text layer quality (mojibake, scrambled reading order, math formulas, scanned)
+        const quality = (window.pdfHandler && typeof window.pdfHandler.assessPageTextQuality === 'function')
+          ? window.pdfHandler.assessPageTextQuality(rawText)
+          : { isReliable: Boolean(rawText && rawText.trim().length >= 50), reasons: [] };
+
+        if (!quality.isReliable) {
+          if (quality.reasons.includes('minimal_text_or_scanned') || !rawText || rawText.trim().length < 40) {
+            this.showProgress('PDF text layer empty. Attempting OCR on scanned pages...', 60);
+            rawText = "Please upload pages as JPG or PNG images or enable Gemini AI Vision for OCR extraction.";
+          } else {
+            console.warn('[PDF Assessment] PDF text layer has quality issues:', quality.reasons);
+            this.showProgress(`Notice: PDF text layer has layout/font anomalies (${quality.reasons.join(', ')}). Switch to Gemini AI Vision for 100% fidelity.`, 60);
+          }
         }
       } else if (fileName.match(/\.(png|jpg|jpeg|webp)$/)) {
         if (files.length === 1) {
@@ -2340,27 +2349,47 @@ class AppController {
 
       // Extraction branch
       if (engine === 'gemini' && window.geminiHandler && window.geminiHandler.hasAnyKey()) {
-        updateProg('Processing with Gemini AI Intelligence...', 40);
-        if (ext === 'pdf' && window.pdfHandler) {
-          const pdfText = await window.pdfHandler.extractText(file, (msg, p) => updateProg(msg, 20 + Math.round(p * 0.3)));
-          const res = await window.geminiHandler.extractFromText(pdfText.fullText, file.name, (msg, p) => updateProg(msg, 50 + Math.round(p * 0.4)));
+        updateProg('Processing with Gemini AI Intelligence...', 35);
+        if (typeof window.geminiHandler.extractSmart === 'function') {
+          const res = await window.geminiHandler.extractSmart(file, {}, (msg, p) => {
+            const pct = typeof p === 'number' ? p : 50;
+            updateProg(msg || 'Extracting questions with Gemini AI...', 30 + Math.round(pct * 0.55));
+          });
+          extracted = typeof res === 'string' ? JSON.parse(res) : res;
+        } else if (ext === 'pdf' && window.pdfHandler) {
+          const pdfResult = await window.pdfHandler.extractText(file, null, (p) => {
+            const pct = typeof p === 'object' ? p.percent : p;
+            updateProg((typeof p === 'object' && p.status) || 'Reading PDF...', 20 + Math.round((pct || 0) * 0.3));
+          });
+          const rawPdfText = pdfResult.fullText || pdfResult.text || '';
+          const res = await window.geminiHandler.extractFromText(rawPdfText, file.name, (msg, p) => {
+            const pct = typeof p === 'number' ? p : 50;
+            updateProg(msg || 'Digitizing questions...', 50 + Math.round(pct * 0.4));
+          });
           extracted = typeof res === 'string' ? JSON.parse(res) : res;
         } else {
-          const res = await window.geminiHandler.extractFromFile(file, (msg, p) => updateProg(msg, 30 + Math.round(p * 0.6)));
+          const res = await window.geminiHandler.extractFromFile(file, (msg, p) => {
+            const pct = typeof p === 'number' ? p : 50;
+            updateProg(msg || 'Processing file...', 30 + Math.round(pct * 0.6));
+          });
           extracted = typeof res === 'string' ? JSON.parse(res) : res;
         }
       } else {
         // Local extraction engine fallback
         updateProg('Processing with client-side extractor...', 40);
         if (ext === 'pdf' && window.pdfHandler) {
-          const pdfText = await window.pdfHandler.extractText(file, (msg, p) => updateProg(msg, 20 + Math.round(p * 0.4)));
-          extracted = window.extractorEngine.extract(pdfText.fullText);
+          const pdfResult = await window.pdfHandler.extractText(file, { extractImages: true }, (p) => {
+            const pct = typeof p === 'object' ? p.percent : p;
+            updateProg((typeof p === 'object' && p.status) || 'Reading PDF...', 20 + Math.round((pct || 0) * 0.4));
+          });
+          const rawPdfText = pdfResult.fullText || pdfResult.text || '';
+          extracted = window.extractorEngine.extract(rawPdfText, { images: pdfResult.images || [] });
         } else if ((ext === 'docx' || ext === 'doc') && window.docxHandler) {
           const docText = await window.docxHandler.extractText(file);
-          extracted = window.extractorEngine.extract(docText);
-        } else if (file.type.startsWith('image/') && window.ocrHandler) {
-          const ocrText = await window.ocrHandler.recognize(file, (msg, p) => updateProg(msg, 20 + Math.round(p * 0.5)));
-          extracted = window.extractorEngine.extract(ocrText);
+          extracted = window.extractorEngine.extract(docText.text || docText);
+        } else if (file.type && file.type.startsWith('image/') && window.ocrHandler) {
+          const ocrText = await window.ocrHandler.recognize(file, (msg, p) => updateProg(msg, 20 + Math.round((p || 0) * 0.5)));
+          extracted = window.extractorEngine.extract(ocrText.text || ocrText);
         } else {
           const text = await file.text();
           extracted = window.extractorEngine.extract(text);
