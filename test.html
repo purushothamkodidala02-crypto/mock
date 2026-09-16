@@ -494,6 +494,51 @@
         actual: `createFolderFn=${typeof window.paperVault?.createFolder === 'function'}, getCustomFoldersFn=${typeof window.paperVault?.getCustomFolders === 'function'}, openFolderUploadModalFn=${typeof window.app?.openFolderUploadModal === 'function'}`
       });
 
+      // TEST 11: Auto-Recovery of Dummy / Placeholder Questions (Q15-23 & Q31-35 Fix)
+      const mockDummyBatch = {
+        sections: [{
+          id: 'sec_1',
+          title: 'Section A',
+          questions: [
+            {
+              questionNumber: '15',
+              questionText: 'Question 15 from paper',
+              options: [{ key: '1', text: 'Option 1' }, { key: '2', text: 'Option 2' }, { key: '3', text: 'Option 3' }, { key: '4', text: 'Option 4' }]
+            },
+            {
+              questionNumber: '31',
+              questionText: 'Question 31',
+              options: [{ key: '1', text: '(1)' }, { key: '2', text: '(2)' }, { key: '3', text: 'Rs. 12,600' }, { key: '4', text: '(4)' }]
+            }
+          ]
+        }]
+      };
+
+      const testRawBatch = `15. I have done a deal of work.
+(1) big (2) great (3) huge (4) enormous
+31. The average weight of a group of men is 77.5 kgs.
+(1) 5:6 (2) 8:7 (3) 12:17 (4) 10:13`;
+
+      const recoveredMock = window.geminiHandler?.recoverHallucinatedQuestionsFromText?.(mockDummyBatch, testRawBatch);
+      const recQ15 = recoveredMock?.sections?.[0]?.questions?.find(q => q.questionNumber === '15');
+      const recQ31 = recoveredMock?.sections?.[0]?.questions?.find(q => q.questionNumber === '31');
+
+      assertions.push({
+        name: 'Auto-Recovery: Authentic Recovery for Q15-23 ("from paper") & Q31-35 ("Question 31")',
+        pass: Boolean(
+          recQ15 && recQ15.questionText.includes('deal of work') && recQ15.options[0].text === 'big' &&
+          recQ31 && recQ31.questionText.includes('average weight') && recQ31.options[0].text === '5:6'
+        ),
+        actual: `q15Text="${recQ15?.questionText?.slice(0, 25)}...", q15Opt="${recQ15?.options?.[0]?.text}", q31Opt="${recQ31?.options?.[0]?.text}"`
+      });
+
+      // TEST 12: AppController removeAllImages method
+      assertions.push({
+        name: 'AppController: removeAllImages Method Present & Functional',
+        pass: typeof window.app?.removeAllImages === 'function',
+        actual: `hasRemoveAllImages=${typeof window.app?.removeAllImages === 'function'}`
+      });
+
       // Render Assertion Rows
       let passCount = 0;
       assertions.forEach(a => {

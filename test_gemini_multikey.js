@@ -429,6 +429,107 @@ console.log('  ✓ Q16 recovered:', recoveredQs[1].questionText, '| Options:', r
 console.log('  ✓ Q21 recovered:', recoveredQs[2].questionText, '| Options:', recoveredQs[2].options.map(o => o.text).join(', '));
 console.log('  ✓ Verified 100% automatic recovery of authentic text when AI hallucinates!');
 
+// Test 12B: User-Reported Issue - Auto-Recovery of Questions 15-23 ("Question X from paper") and Questions 31-35 ("Question 31" + "(1)", "(2)", etc.)
+console.log('\nTest 12B: Verifying Auto-Recovery on Questions 15-23 and 31-35 dummy outputs...');
+
+const simulatedUserScreenshotsBatch = {
+  sections: [
+    {
+      id: 'sec_1',
+      title: 'English & Comprehension',
+      questions: [
+        {
+          id: 'q_15',
+          questionNumber: '15',
+          questionText: 'Question 15 from paper',
+          options: [
+            { key: '1', text: 'Option 1' },
+            { key: '2', text: 'Option 2' },
+            { key: '3', text: 'Option 3' },
+            { key: '4', text: 'Option 4' }
+          ]
+        },
+        {
+          id: 'q_16',
+          questionNumber: '16',
+          questionText: 'Question 16 from paper',
+          options: [
+            { key: '1', text: 'Option 1' },
+            { key: '2', text: 'Option 2' },
+            { key: '3', text: 'Option 3' },
+            { key: '4', text: 'Option 4' }
+          ]
+        }
+      ]
+    }
+  ]
+};
+
+const recoveredPage3 = handler.recoverHallucinatedQuestionsFromText(simulatedUserScreenshotsBatch, rawPage3Text);
+const recQs15 = recoveredPage3.sections[0].questions;
+assert.strictEqual(recQs15[0].questionNumber, '15');
+assert.ok(recQs15[0].questionText.includes('deal of work'), 'Q15 must be recovered from real text');
+assert.strictEqual(recQs15[0].options[0].text, 'big');
+assert.strictEqual(recQs15[0].options[1].text, 'great');
+console.log('  ✓ Q15 recovered from "Question 15 from paper":', recQs15[0].questionText);
+
+const rawPage5Text = `--- [Page 5] ---
+31. The average weight of a group of men is 77.5 kgs. The average weight of a group of women is 70 kgs. The average weight of all the persons of both groups is 74 kgs. The ratio of the number of men and women in the two groups is
+ఒక పురుషుల సమూహం యొక్క సరాసరి బరువు 77.5 kgs. ఒక స్త్రీల సమూహం యొక్క సరాసరి బరువు 70 kgs, రెండు సమూహాలలోని వ్యక్తుల సరాసరి బరువు 74 kgs. ఆ రెండు సమూహాలలో ఉన్న పురుషుల సంఖ్య మరియు స్త్రీల సంఖ్యల నిష్పత్తి
+(1) 5:6 (2) 8:7 (3) 12:17 (4) 10:13
+
+32. A and B enter into a partnership by investing Rs. 24,000 each. But B has borrowed his investment amount from A at the rate of 10% per annum. To look after the business, B will be paid Rs. 120 per month as salary. At the end of the year, if B's income is half of the income of A, then the total profit is
+ఒక్కొక్కరు Rs. 24,000 పెట్టుబడితో A మరియు B లు భాగస్వామ్యులయ్యారు. కానీ B తన పెట్టుబడి మొత్తాన్ని A నుండి సాలీన 10% వడ్డీ చొప్పున అప్పు తీసుకున్నాడు. వ్యాపార నిర్వహణ క్రింద నెలకు Rs. 120 ల జీతాన్ని తీసుకున్నాడు. సంవత్సరాంతంలో B కి వచ్చిన ఆదాయం A కి వచ్చిన ఆదాయంలో సగం అయితే, మొత్తం లాభం (1) 10,080 (2) 9,660 (3) 12,000 (4) 12,060`;
+
+const simulatedPage5Batch = {
+  sections: [
+    {
+      id: 'sec_1',
+      title: 'Math',
+      questions: [
+        {
+          id: 'q_31',
+          questionNumber: '31',
+          questionText: 'Question 31',
+          options: [
+            { key: '1', text: '(1)' },
+            { key: '2', text: '(2)' },
+            { key: '3', text: 'Rs. 12,600' },
+            { key: '4', text: '(4)' }
+          ]
+        },
+        {
+          id: 'q_32',
+          questionNumber: '32',
+          questionText: 'Question 32',
+          options: [
+            { key: '1', text: '(1)' },
+            { key: '2', text: '(2)' },
+            { key: '3', text: '(3)' },
+            { key: '4', text: '(4)' }
+          ]
+        }
+      ]
+    }
+  ]
+};
+
+const recoveredPage5 = handler.recoverHallucinatedQuestionsFromText(simulatedPage5Batch, rawPage5Text);
+const recQs31 = recoveredPage5.sections[0].questions;
+assert.strictEqual(recQs31[0].questionNumber, '31');
+assert.ok(recQs31[0].questionText.includes('average weight of a group of men'), 'Q31 must be recovered from real text');
+assert.strictEqual(recQs31[0].options[0].text, '5:6');
+assert.strictEqual(recQs31[0].options[1].text, '8:7');
+assert.strictEqual(recQs31[0].options[2].text, '12:17');
+assert.strictEqual(recQs31[0].options[3].text, '10:13');
+console.log('  ✓ Q31 recovered from "Question 31" + "(1)", "(2)":', recQs31[0].options.map(o => `(${o.key}) ${o.text}`).join(' | '));
+
+assert.strictEqual(recQs31[1].questionNumber, '32');
+assert.ok(recQs31[1].questionText.includes('partnership'), 'Q32 must be recovered from real text');
+assert.strictEqual(recQs31[1].options[0].text, '10,080');
+assert.strictEqual(recQs31[1].options[3].text, '12,060');
+console.log('  ✓ Q32 recovered from "Question 32" + "(1)", "(2)":', recQs31[1].options.map(o => `(${o.key}) ${o.text}`).join(' | '));
+
 // Test 13: isAnswerKeyPage Detection & Exclusion
 console.log('\nTest 13: Answer Key Page Detection & Exclusion (Page 39 Prevention)...');
 

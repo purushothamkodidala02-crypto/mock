@@ -513,14 +513,14 @@ Return ONLY a valid JSON object matching this exact JSON schema:
           "marks": 1,
           "type": "mcq",
           "section": "Section A",
-          "questionText": "Question text here...",
+          "questionText": "I have done a ______ deal of work.",
           "options": [
-            { "key": "1", "text": "First choice words from paper" },
-            { "key": "2", "text": "Second choice words from paper" },
-            { "key": "3", "text": "Third choice words from paper" },
-            { "key": "4", "text": "Fourth choice words from paper" }
+            { "key": "1", "text": "big" },
+            { "key": "2", "text": "great" },
+            { "key": "3", "text": "huge" },
+            { "key": "4", "text": "enormous" }
           ],
-          "correctAnswer": "1",
+          "correctAnswer": "2",
           "explanation": ""
         }
       ]
@@ -533,9 +533,11 @@ CRITICAL RULES:
   * NEVER invent, synthesize, or fabricate questions or options!
   * You are an exact transcription engine. Extract ONLY the questions and options that are printed verbatim in the document.
   * NEVER create artificial questions starting with "Based on the passage...", "Based on the passage context regarding...", or similar synthetic prompts.
-  * NEVER output placeholder options like "Option 1", "Option 2", "Option 3", "Option 4" or "Option A", "Option B". Every single option text MUST contain the actual printed choice words from the paper (e.g. "(1) big (2) great (3) huge (4) enormous").
+  * NEVER output placeholder text like "Question 15 from paper", "Question 31", or "Q15" as "questionText"! Every "questionText" MUST contain the real printed question sentences from the exam paper.
+  * NEVER output placeholder options like "Option 1", "Option 2", "Option 3", "Option 4" or numeric echoes like "(1)", "(2)", "(3)", "(4)"! Every single option text MUST contain the actual printed choice words or numbers from the paper (e.g. "(1) big (2) great (3) huge (4) enormous" or "(1) 5:6 (2) 8:7 (3) 12:17 (4) 10:13" or "(1) 10,080 (2) 9,660 (3) 12,000 (4) 12,060").
   * When a page contains a reading passage (e.g. Hiroshima nuclear blast passage), questions BEFORE the passage (e.g. Questions 15 to 20) are INDEPENDENT grammar/vocabulary questions. EXTRACT THEIR PRINTED TEXT AND REAL OPTIONS VERBATIM!
   * For reading passage questions (e.g. Questions 21 to 25), extract ONLY the actual printed questions and actual printed options! DO NOT invent hypothetical questions from the passage text.
+  * For arithmetic & bilingual questions (e.g. Questions 31 to 35): Extract the full problem stem in English AND Telugu, and extract all 4 numerical/ratio choices accurately! NEVER truncate or skip them.
 - MANDATORY: START FROM QUESTION 1 (OR FIRST QUESTION ON PAGE): You MUST extract the very first numbered question (e.g. Question 1) visible in this batch. Even if Question 1 has multi-column formatting, broken lines, or options split across lines (e.g. '1. A pair of socks been missing (2) from my room...'), reconstruct the complete question text and all options. NEVER omit Question 1 or dismiss it as header/title text!
 - EXTRACT ALL QUESTIONS IN THE CHUNK COMPLETELY: Extract EVERY single question in the provided chunk sequentially without stopping or omitting any intermediate questions.
 - Do NOT skip any questions or truncate output. Extract ALL questions visible.
@@ -583,7 +585,16 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
 5. QUESTION NUMBERING INTEGRITY:
    - "questionNumber" must match the EXACT printed number on the question paper (e.g. "199", "200").
    - NEVER skip question numbers or jump (e.g. if the previous question is 199 and the next question is 200, it MUST be "200", NOT "205").
-   - Ignore watermarks (like "Adda247") stamped across question numbers.`;
+   - Ignore watermarks (like "Adda247") stamped across question numbers.
+
+6. IMAGE-BASED & DIAGRAMMATIC QUESTIONS:
+   - If a question's stem or options are visual (such as a geometric figure, triangles, Venn diagram, circuit, graph, chart, or data table):
+     * NEVER leave "questionText" blank or empty!
+     * Extract the question number and any printed text/labels visible inside or beside the diagram.
+     * Describe the visual elements accurately in "questionText" using bracketed notation, e.g.:
+       "[Diagram: In the given figure, triangle ABC is shown with sides... / క్రింది పటంలో...]"
+     * If the options themselves are diagrammatic or values labeled in the figure, transcribe their labels, coordinates, or values faithfully into the "options" array.
+     * Ensure every question has valid questionText and options.`;
   }
 
   /**
@@ -1141,7 +1152,7 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
           }
 
           this.keyManager.recordSuccess(currentKey.id);
-          this.recoverHallucinatedQuestionsFromText(parsedJSON, batchText);
+          parsedJSON = this.recoverHallucinatedQuestionsFromText(parsedJSON, batchText);
           return parsedJSON;
 
         } catch (err) {
@@ -1155,25 +1166,48 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
 
   /**
    * Recovers authentic printed questions when Gemini hallucinates "Based on the passage..."
-   * or outputs dummy placeholder options like "Option 1", "Option 2", "Option 3", "Option 4".
+   * or outputs dummy placeholder options like "Option 1", "(1)", "Question 15 from paper".
    */
   recoverHallucinatedQuestionsFromText(parsedJSON, rawBatchText) {
     if (!parsedJSON || !rawBatchText || typeof rawBatchText !== 'string') return parsedJSON;
 
     const isDummyOrHallucinated = (q) => {
       if (!q) return false;
-      const isSyntheticStem = /^based\s+on\s+the\s+passage/i.test(String(q.questionText || '').trim());
-      const hasDummyOpts = Array.isArray(q.options) && q.options.length >= 2 && q.options.every(o => {
+      const stem = String(q.questionText || '').trim();
+      const qNum = String(q.questionNumber || '').trim();
+
+      // 1. Synthetic or dummy question stem (e.g. "Question 15 from paper", "Question 31", "Based on the passage...")
+      const isPlaceholderStem =
+        stem.length === 0 ||
+        /^based\s+on\s+the\s+passage/i.test(stem) ||
+        /^question\s*\d+\s*(?:from\s*paper)?$/i.test(stem) ||
+        /^q\s*\.?\s*\d+$/i.test(stem) ||
+        (qNum && new RegExp(`^question\\s*${qNum}(?:\\s*from\\s*paper)?$`, 'i').test(stem)) ||
+        (qNum && new RegExp(`^q\\s*\\.?\\s*${qNum}$`, 'i').test(stem));
+
+      if (isPlaceholderStem) return true;
+
+      // 2. Dummy or placeholder options (e.g. "Option 1", "(1)", "1", "(2)", etc.)
+      const isDummyOpt = (o) => {
+        if (!o) return true;
         const t = String(o.text || '').trim();
         const k = String(o.key || '').trim();
-        return (
-          t === k ||
-          /^[1-4]$/.test(t) ||
-          t.length === 0 ||
-          /^option\s*[1-4a-d]?\s*(?:text)?$/i.test(t)
-        );
-      });
-      return isSyntheticStem || hasDummyOpts;
+        if (t.length === 0 || t === k) return true;
+        if (t === `(${k})` || t === `[${k}]` || t === `${k}.` || t === `${k})`) return true;
+        if (/^\(?[1-4a-eA-E]\)?[\.,]?$/.test(t)) return true;
+        if (/^option\s*[1-4a-d]?\s*(?:text)?$/i.test(t)) return true;
+        if (/^(?:first|second|third|fourth)\s+choice\s+words/i.test(t)) return true;
+        return false;
+      };
+
+      if (Array.isArray(q.options) && q.options.length >= 2) {
+        const dummyCount = q.options.filter(isDummyOpt).length;
+        if (dummyCount >= 2 && dummyCount >= Math.ceil(q.options.length / 2)) {
+          return true;
+        }
+      }
+
+      return false;
     };
 
     const sections = parsedJSON.sections || [];
@@ -1219,12 +1253,12 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
         if (isDummyOrHallucinated(q)) {
           const num = String(q.questionNumber || '').trim();
           const localQ = localMap[num];
-          if (localQ && localQ.options && localQ.options.length >= 2) {
-            console.log(`[Gemini Extractor] Auto-recovered authentic Q${num} from document text: "${localQ.questionText.slice(0, 45)}..."`);
+          if (localQ) {
+            console.log(`[Gemini Extractor] Auto-recovered authentic Q${num} from document text: "${(localQ.questionText || '').slice(0, 45)}..."`);
             return {
               ...q,
-              questionText: localQ.questionText,
-              options: localQ.options,
+              questionText: (localQ.questionText && localQ.questionText.trim().length > 3) ? localQ.questionText : q.questionText,
+              options: (localQ.options && localQ.options.length >= 2) ? localQ.options : q.options,
               type: localQ.type || q.type || 'mcq'
             };
           }
@@ -1238,11 +1272,11 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
         if (isDummyOrHallucinated(q)) {
           const num = String(q.questionNumber || '').trim();
           const localQ = localMap[num];
-          if (localQ && localQ.options && localQ.options.length >= 2) {
+          if (localQ) {
             return {
               ...q,
-              questionText: localQ.questionText,
-              options: localQ.options,
+              questionText: (localQ.questionText && localQ.questionText.trim().length > 3) ? localQ.questionText : q.questionText,
+              options: (localQ.options && localQ.options.length >= 2) ? localQ.options : q.options,
               type: localQ.type || q.type || 'mcq'
             };
           }
@@ -1250,6 +1284,29 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
         return q;
       });
     }
+
+    // Also inject any authentic questions that Gemini omitted entirely from this batch
+    const existingQNums = new Set();
+    sections.forEach(sec => {
+      (sec.questions || []).forEach(q => {
+        const num = String(q.questionNumber || '').trim();
+        if (num) existingQNums.add(num);
+      });
+    });
+
+    (localRes.questions || []).forEach(lq => {
+      const num = String(lq.questionNumber || '').trim();
+      if (num && !existingQNums.has(num)) {
+        console.log(`[Gemini Extractor] Injected omitted question Q${num} from document text`);
+        if (sections.length > 0) {
+          sections[0].questions.push(lq);
+        }
+        if (Array.isArray(parsedJSON.questions)) {
+          parsedJSON.questions.push(lq);
+        }
+        existingQNums.add(num);
+      }
+    });
 
     return parsedJSON;
   }
@@ -1930,6 +1987,7 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
           }
 
           this.keyManager.recordSuccess(currentKey.id);
+          parsedJSON = this.recoverHallucinatedQuestionsFromText(parsedJSON, rawText);
           progress('Finalizing question paper...', 95);
           return this.standardizeGeminiOutput(parsedJSON, fileName, { modelUsed: model, keyUsed: currentKey.label });
 
@@ -2083,12 +2141,29 @@ SPECIAL RULES FOR COMPETITIVE EXAMS (AVOID EXTRACTION MISMATCH):
     }
 
     // 2. DUMMY OPTIONS RECOVERY (e.g. Q198 where options were output as [{"key":"1","text":"1"}, ...] while statements were in questionText)
+    const isSingleDummyOpt = (opt) => {
+      if (!opt) return true;
+      const t = String(opt.text || '').trim();
+      const k = String(opt.key || '').trim();
+      if (t.length === 0 || t === k) return true;
+      if (t === `(${k})` || t === `[${k}]` || t === `${k}.` || t === `${k})`) return true;
+      if (/^\(?[1-4a-eA-E]\)?[\.,]?$/.test(t)) return true;
+      if (/^option\s*[1-4a-d]?\s*(?:text)?$/i.test(t)) return true;
+      return false;
+    };
+    const dummyOptCount = Array.isArray(q.options) ? q.options.filter(isSingleDummyOpt).length : 0;
     const isDummyOptions = Array.isArray(q.options) && q.options.length >= 2 &&
-      q.options.every(opt => {
-        const t = String(opt.text || '').trim();
-        const k = String(opt.key || '').trim();
-        return t === k || /^[1-4]$/.test(t) || t.length === 0 || /^option\s*[1-4a-d]?\s*(?:text)?$/i.test(t);
-      });
+      (dummyOptCount >= 2 && dummyOptCount >= Math.ceil(q.options.length / 2));
+
+    // 2b. Placeholder stem cleanup: Clear dummy stems like "Question 15 from paper", "Question 31", "Q31"
+    if (q.questionText) {
+      const qNum = String(q.questionNumber || '').trim();
+      if (/^question\s*\d+\s*(?:from\s*paper)?$/i.test(q.questionText.trim()) ||
+          /^q\s*\.?\s*\d+$/i.test(q.questionText.trim()) ||
+          (qNum && new RegExp(`^question\\s*${qNum}(?:\\s*from\\s*paper)?$`, 'i').test(q.questionText.trim()))) {
+        q.questionText = '';
+      }
+    }
 
     if (isDummyOptions && q.questionText) {
       // Look for (1) ... (2) ... (3) ... (4) inside q.questionText

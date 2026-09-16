@@ -118,6 +118,23 @@ class QuestionPaperExtractor {
           }
         }
       });
+
+      // Tier 3: Auto-assign images to empty/text-less questions (image-only questions from PDF)
+      // When a question has empty questionText AND no MCQ options, the question content
+      // is almost certainly embedded as a raster image in the PDF (not in the text layer).
+      allQuestions.forEach(q => {
+        if (q.image) return;
+        const hasContent = (q.questionText || '').trim().length > 0 ||
+                           (q.options && q.options.length > 0);
+        if (!hasContent) {
+          const nextImgIdx = availableImages.findIndex((_, idx) => !assignedImageIndices.has(idx));
+          if (nextImgIdx !== -1) {
+            q.image = availableImages[nextImgIdx].dataUrl || availableImages[nextImgIdx];
+            q.isImageOnly = true;
+            assignedImageIndices.add(nextImgIdx);
+          }
+        }
+      });
     }
 
     // 8. Statistics
@@ -157,8 +174,11 @@ class QuestionPaperExtractor {
     // Multi-column bleed protection: Split embedded question numbers onto new lines (only 2-3 digit questions e.g. 10-500, never single digit math values like "is 5. Then" or years like 1986)
     normalized = normalized.replace(/([^\n])\s+(\b(?:[1-9]\d{1,2})\.\s+[A-Za-z\u0C00-\u0C7F\u0900-\u097F])/g, '$1\n$2');
 
+    // Standardize parenthesized option markers with trailing punctuation e.g. "(4), " or "(2). " -> "(4) ", "(2) "
+    normalized = normalized.replace(/\(\s*([1-4a-dA-D])\s*\)[\.,;:—\-]?\s+/g, '($1) ');
+
     // Split embedded question prompts and options onto new lines, but protect question numbering prefixes like "200. Match the following"
-    normalized = normalized.replace(/([^\n])\s+(\(\s*[1-4a-dA-D]\s*\)\s+)/g, '$1\n$2');
+    normalized = normalized.replace(/([^\n])\s+(\(\s*[1-4a-dA-D]\s*\)\s*)/g, '$1\n$2');
     normalized = normalized.replace(/([^\n\d\.\)])\s+(\b(?:Select from the|Choose the right|Which of the following|Match the following|Fill in the blanks?)\b)/gi, '$1\n$2');
 
     return normalized;

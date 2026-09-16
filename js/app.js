@@ -707,7 +707,7 @@ class AppController {
 
       if (fileName.endsWith('.pdf')) {
         this.showProgress('Extracting PDF text layer & layout...', 30);
-        const extractImages = document.getElementById('toggle-extract-images')?.checked || false;
+        const extractImages = true; // Always extract images so image-only questions get their content
         const pdfResult = await window.pdfHandler.extractText(firstFile, { extractImages }, (p) => {
           this.showProgress(p.status || `Reading PDF Page ${p.current} of ${p.total}...`, Math.round(30 + (p.percent * 0.5)));
         });
@@ -974,8 +974,34 @@ class AppController {
       }
     });
 
+    // Toggle "Clear Diagrams" button visibility
+    const hasAnyImages = (this.extractedData?.questions || []).some(q => !!q.image);
+    const clearBtn = document.getElementById('btn-clear-all-images');
+    if (clearBtn) {
+      clearBtn.classList.toggle('hidden', !hasAnyImages);
+    }
+
     this.setupIcons();
     this.renderMathFormulas();
+  }
+
+  removeAllImages() {
+    if (!this.extractedData || !this.extractedData.questions || this.extractedData.questions.length === 0) return;
+    if (confirm('Are you sure you want to remove all attached diagrams/images from this question paper?')) {
+      this.extractedData.questions.forEach(q => {
+        delete q.image;
+        q.image = null;
+      });
+      if (this.extractedData.sections) {
+        this.extractedData.sections.forEach(sec => {
+          (sec.questions || []).forEach(q => {
+            delete q.image;
+            q.image = null;
+          });
+        });
+      }
+      this.applyFilters();
+    }
   }
 
   createQuestionCard(q, section) {
@@ -1044,7 +1070,7 @@ class AppController {
       </div>
 
       <div class="text-sm font-medium text-slate-800 leading-relaxed math-rendered">
-        ${q.questionText}
+        ${q.questionText || (q.image ? '<span class="inline-flex items-center gap-1.5 text-amber-700 italic bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200 text-xs font-semibold"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg> Visual Question — See Diagram Below</span>' : '<span class="inline-flex items-center gap-1.5 text-slate-400 italic bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200 text-xs font-semibold"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path></svg> Image-based question — content not extracted from PDF</span>')}
       </div>
 
       ${imageHtml}
@@ -1057,10 +1083,10 @@ class AppController {
     return card;
   }
 
-  renderMathFormulas() {
+  renderMathFormulas(targetContainer = null) {
     if (window.renderMathInElement) {
       try {
-        const container = document.getElementById('questions-studio-container');
+        const container = targetContainer || document.getElementById('questions-studio-container');
         if (container) {
           window.renderMathInElement(container, {
             delimiters: [
@@ -1322,12 +1348,45 @@ class AppController {
     const idx = window.quizEngine.currentQuestionIndex;
     const total = window.quizEngine.questions.length;
 
-    document.getElementById('quiz-q-num').textContent = `Question ${q.questionNumber || (idx + 1)}`;
-    document.getElementById('quiz-q-marks').textContent = `${q.marks || 1} Mark${(q.marks > 1 ? 's' : '')}`;
-    document.getElementById('quiz-progress-text').textContent = `Question ${idx + 1} of ${total}`;
+    const numBadge = document.getElementById('quiz-q-num-badge') || document.getElementById('quiz-q-num');
+    if (numBadge) numBadge.textContent = `Q${q.questionNumber || (idx + 1)}`;
 
-    // Question text
-    document.getElementById('quiz-question-text').textContent = q.questionText;
+    const marksBadge = document.getElementById('quiz-q-marks-badge') || document.getElementById('quiz-q-marks');
+    if (marksBadge) marksBadge.textContent = `${q.marks || 1} Mark${(q.marks > 1 ? 's' : '')}`;
+
+    const typeBadge = document.getElementById('quiz-q-type-badge');
+    if (typeBadge) {
+      typeBadge.textContent = (q.type || 'MCQ').replace('_', ' ').toUpperCase();
+      typeBadge.className = `px-2.5 py-1 rounded-md font-semibold text-xs badge-${q.type || 'mcq'}`;
+    }
+
+    const progText = document.getElementById('quiz-progress-text');
+    if (progText) progText.textContent = `Question ${idx + 1} of ${total}`;
+
+    // Question text & placeholder for empty text
+    const qTextElem = document.getElementById('quiz-question-text');
+    if (qTextElem) {
+      if (q.questionText && q.questionText.trim()) {
+        qTextElem.textContent = q.questionText;
+      } else if (q.image) {
+        qTextElem.innerHTML = '<span class="inline-flex items-center gap-1.5 text-amber-700 italic bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200 text-xs font-semibold"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg> Visual Question — Refer to Attached Diagram Below</span>';
+      } else {
+        qTextElem.innerHTML = '<span class="inline-flex items-center gap-1.5 text-slate-400 italic bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200 text-xs font-semibold"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path></svg> Image-based question — diagram/text not captured in PDF text layer</span>';
+      }
+    }
+
+    // Question Diagram Container
+    const imgContainer = document.getElementById('quiz-question-image-container');
+    if (imgContainer) {
+      if (q.image) {
+        imgContainer.innerHTML = `<img src="${q.image}" class="max-h-80 rounded-xl border border-slate-200 p-2 bg-white shadow-sm" alt="Question ${q.questionNumber} Diagram" />`;
+        imgContainer.classList.remove('hidden');
+      } else {
+        imgContainer.innerHTML = '';
+        imgContainer.classList.add('hidden');
+      }
+    }
+
 
     // Flag button state
     const isFlagged = window.quizEngine.isFlagged(q.id);
@@ -1390,7 +1449,7 @@ class AppController {
     document.getElementById('btn-quiz-next').classList.toggle('opacity-50', idx === total - 1);
 
     this.setupIcons();
-    this.renderMathFormulas();
+    this.renderMathFormulas(document.getElementById('quiz-modal'));
   }
 
   renderQuizPalette() {
