@@ -19,6 +19,10 @@ class QuestionPaperExtractor {
       return this.createEmptyResult();
     }
 
+    if (window.pdfHandler?.hasLegacyFontCorruption(rawText)) {
+      throw new Error('This document contains unreadable legacy-font text. Select Gemini AI Vision and re-extract the original PDF to recover Telugu and mathematical notation.');
+    }
+
     const availableImages = options.images || [];
 
     // 1. Normalize text line endings and basic whitespace

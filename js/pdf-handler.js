@@ -123,6 +123,18 @@ class PDFHandler {
    * @param {string} pageText
    * @returns {{ isReliable: boolean, score: number, reasons: string[], hasMath: boolean, hasBilingual: boolean, isScanned: boolean }}
    */
+  hasLegacyFontCorruption(text) {
+    if (typeof text !== 'string') return false;
+    // Legacy Telugu fonts expose Latin glyph codes instead of Unicode Telugu.
+    // Require repeated distinctive sequences, not ordinary accents or math symbols.
+    const markers = text.match(/(?:µR∂|LRi[WV]|xqsLi|Æ[™\u0099]s|NTP|sªRΩ)/g) || [];
+    const encodedTokens = text.split(/\s+/).filter(token =>
+      /[A-Za-z]/.test(token) &&
+      (token.match(/[∂ﬂ≤≥™¤¡Õﬁ©´ªΩ≠]/g) || []).length >= 2
+    );
+    return (markers.length >= 2 && encodedTokens.length >= 1) || encodedTokens.length >= 3;
+  }
+
   assessPageTextQuality(pageText) {
     if (!pageText || typeof pageText !== 'string') {
       return { isReliable: false, score: 0, reasons: ['empty_content'], hasMath: false, hasBilingual: false, isScanned: true };
@@ -134,6 +146,9 @@ class PDFHandler {
     }
 
     const reasons = [];
+    if (this.hasLegacyFontCorruption(trimmed)) {
+      reasons.push('legacy_font_encoding_corruption');
+    }
 
     // 1. Mojibake detection (UTF-8 bytes decoded as Latin-1 / Windows-1252)
     // Telugu / Indic: à°, à±, à¤, à¥, à¦, à§, etc.
@@ -410,4 +425,3 @@ class PDFHandler {
 }
 
 window.pdfHandler = new PDFHandler();
-

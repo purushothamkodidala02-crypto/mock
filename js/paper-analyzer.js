@@ -59,6 +59,12 @@ class PaperPatternAnalyzer {
       const detectedTopics = {};
       const questionEvidence = [];
 
+      if (questionsList.some(q =>
+        [q.questionText, q.passage, ...(q.options || []).map(o => o.text)]
+          .some(text => window.pdfHandler?.hasLegacyFontCorruption(text)))) {
+        throw new Error('A selected paper contains corrupted legacy-font text. Re-extract its original PDF with Gemini AI Vision before analyzing exam patterns.');
+      }
+
       questionsList.forEach((q, questionIndex) => {
         const text = q.questionText || '';
         const lower = text.toLowerCase();

@@ -1442,6 +1442,10 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
       const q = questions[i];
       const qNum = String(q.questionNumber || '').trim();
       const reasons = q.reviewReason ? [q.reviewReason] : [];
+      const sourceFields = [q.questionText, q.passage, ...(q.options || []).map(o => o.text)];
+      if (sourceFields.some(text => window.pdfHandler?.hasLegacyFontCorruption(text))) {
+        reasons.push('Corrupted legacy-font text: re-extract the original PDF using Vision');
+      }
 
       // 1. Placeholder question stem detection
       const stem = String(q.questionText || '').trim();
