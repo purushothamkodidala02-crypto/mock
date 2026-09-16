@@ -297,9 +297,17 @@ const numeric = [makeQ(1, 'How many?', ['1', '2', '3', '4'])];
 geminiHandler.validateAndFlagQuestions(numeric);
 assert.ok(!numeric[0].needsReview);
 const pages = [1, 2, 3].map(n => `--- [Page ${n}] ---\nPage ${n} question content`).join('\n');
-const overlapping = geminiHandler.splitTextIntoBatches(pages);
+const overlapping = geminiHandler.splitTextIntoBatches(pages, 12, 1);
 assert.ok(overlapping[0].includes('[Page 2]'));
 assert.ok(overlapping[1].includes('[Page 1]') && overlapping[1].includes('[Page 3]'));
+const longPaperText = Array.from({ length: 57 }, (_, i) =>
+  `--- [Page ${i + 1}] ---\nQuestion content for page ${i + 1}`
+).join('\n');
+const optimizedBatches = geminiHandler.splitTextIntoBatches(longPaperText);
+assert.strictEqual(optimizedBatches.length, 15, '57 text pages should use 15 grouped batches, not 57 requests');
+for (let page = 1; page <= 57; page++) {
+  assert.ok(optimizedBatches.some(batch => batch.includes(`[Page ${page}]`)), `Page ${page} must remain covered`);
+}
 console.log('Merge and continuation regression checks passed.');
 
 // Gemini API failures must keep their real category instead of becoming auth failures.

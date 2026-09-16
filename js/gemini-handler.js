@@ -867,7 +867,7 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
    * Prioritizes page boundaries (2 pages per batch) so questions are never fragmented,
    * never omitted, and never exceed Gemini's output generation window.
    */
-  splitTextIntoBatches(rawText, targetBatchSize = 12, pagesPerBatch = 1) {
+  splitTextIntoBatches(rawText, targetBatchSize = 12, pagesPerBatch = 4) {
     if (!rawText || typeof rawText !== 'string') return [rawText || ''];
 
     // STRATEGY 1: Split by page markers (--- [Page X] ---)
@@ -1026,7 +1026,7 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
         .join('\n\n');
 
       // 1 page per batch guarantees 100% question extraction without skipping complex pages
-      const textBatches = this.splitTextIntoBatches(textContent, 10, 1);
+      const textBatches = this.splitTextIntoBatches(textContent, 12, 4);
       const totalTextBatches = textBatches.length;
       progress(`⚡ Digitizing ${textPagesWithContent.length} text pages across ${totalTextBatches} fast AI batches...`, 20);
 
@@ -1149,7 +1149,7 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
   /**
    * Processes a single batch of text with Multi-Key Rotation and failover
    */
-  async extractSingleTextBatch(batchText, batchNum, totalBatches, onProgress = null) {
+  async extractSingleTextBatch(batchText, batchNum, totalBatches, onProgress = null, retryAttempt = 1) {
     const promptText = `${this.buildExtractionPrompt(`Batch ${batchNum} of ${totalBatches}`)}\n\n<document_content>\n${batchText}\n</document_content>\n\nTRANSCRIBE ALL QUESTIONS FROM THE ABOVE DOCUMENT CONTENT FAITHFULLY.`;
     const primaryModel = this.getModelName();
     const candidateModels = [
@@ -1261,7 +1261,14 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
       }
     }
 
-    throw this.finalizeApiError(lastError, `Batch ${batchNum} extraction failed.`);
+    const finalError = this.finalizeApiError(lastError, `Batch ${batchNum} extraction failed.`);
+    if ((finalError.code === 'GEMINI_SERVICE_BUSY' || finalError.code === 'GEMINI_NETWORK') && retryAttempt < 3) {
+      const waitMs = retryAttempt * 5000;
+      if (onProgress) onProgress(`Gemini is temporarily busy. Retrying this batch (${retryAttempt + 1}/3) in ${waitMs / 1000}s...`, 45);
+      await new Promise(resolve => setTimeout(resolve, waitMs));
+      return this.extractSingleTextBatch(batchText, batchNum, totalBatches, onProgress, retryAttempt + 1);
+    }
+    throw finalError;
   }
 
   /**
@@ -1852,7 +1859,7 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
   /**
    * Executes a Gemini API call for a visual batch of pages/images with Multi-Key Rotation
    */
-  async extractSingleVisualBatch(imageParts, pageRangeDesc, batchNum, totalBatches, onProgress = null) {
+  async extractSingleVisualBatch(imageParts, pageRangeDesc, batchNum, totalBatches, onProgress = null, retryAttempt = 1) {
     const promptText = `${this.buildExtractionPrompt(pageRangeDesc)}\n\n<document_content>\n[Attached visual high-resolution page image(s) for ${pageRangeDesc}]\n</document_content>\n\nTRANSCRIBE ALL QUESTIONS VISIBLE IN THESE PAGES CAREFULLY AND FAITHFULLY.`;
     const primaryModel = this.getModelName();
     const candidateModels = [
@@ -1982,7 +1989,14 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
       }
     }
 
-    throw this.finalizeApiError(lastError, `Visual batch ${batchNum} extraction failed.`);
+    const finalError = this.finalizeApiError(lastError, `Visual batch ${batchNum} extraction failed.`);
+    if ((finalError.code === 'GEMINI_SERVICE_BUSY' || finalError.code === 'GEMINI_NETWORK') && retryAttempt < 3) {
+      const waitMs = retryAttempt * 5000;
+      if (onProgress) onProgress(`Gemini is temporarily busy. Retrying this visual batch (${retryAttempt + 1}/3) in ${waitMs / 1000}s...`, 45);
+      await new Promise(resolve => setTimeout(resolve, waitMs));
+      return this.extractSingleVisualBatch(imageParts, pageRangeDesc, batchNum, totalBatches, onProgress, retryAttempt + 1);
+    }
+    throw finalError;
   }
 
   /**
@@ -2018,7 +2032,7 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
 
     // If PDF has > 2 pages, batch by 2 pages for high visual accuracy & zero truncation
     if (targetPages.length > 2 && window.pdfHandler && typeof window.pdfHandler.renderPagesToJPEGs === 'function') {
-      const pagesPerBatch = 2;
+      const pagesPerBatch = 3;
       const batches = [];
       for (let i = 0; i < targetPages.length; i += pagesPerBatch) {
         batches.push(targetPages.slice(Math.max(0, i - 1), i + pagesPerBatch + 1));
