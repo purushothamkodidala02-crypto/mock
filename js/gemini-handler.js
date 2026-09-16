@@ -458,6 +458,61 @@ class GeminiHandler {
     }
   }
 
+  createApiError(status, message, context = '') {
+    const rawMessage = String(message || 'Unknown Gemini API error');
+    const lower = rawMessage.toLowerCase();
+    const error = new Error(context ? `${context}: ${rawMessage}` : rawMessage);
+    error.status = Number(status) || 0;
+
+    if (status === 429 || lower.includes('resource_exhausted') || lower.includes('quota')) {
+      error.code = 'GEMINI_QUOTA';
+    } else if ([500, 502, 503, 504].includes(Number(status)) ||
+               lower.includes('high demand') || lower.includes('overloaded') ||
+               lower.includes('temporarily unavailable') || lower.includes('service unavailable')) {
+      error.code = 'GEMINI_SERVICE_BUSY';
+    } else if ([401, 403].includes(Number(status)) ||
+               lower.includes('api_key_invalid') || lower.includes('api key not valid') ||
+               lower.includes('unauthenticated') || lower.includes('permission denied')) {
+      error.code = 'GEMINI_AUTH';
+    } else if (status === 404 || (lower.includes('model') &&
+               (lower.includes('not found') || lower.includes('deprecated') || lower.includes('no longer available')))) {
+      error.code = 'GEMINI_MODEL_UNAVAILABLE';
+    } else if (status === 400) {
+      error.code = 'GEMINI_BAD_REQUEST';
+    } else {
+      error.code = 'GEMINI_REQUEST_FAILED';
+    }
+    return error;
+  }
+
+  normalizeThrownError(error) {
+    if (error?.code) return error;
+    if (error?.name === 'AbortError') {
+      const timeoutError = new Error('The Gemini request timed out.');
+      timeoutError.code = 'GEMINI_NETWORK';
+      return timeoutError;
+    }
+    const normalized = error instanceof Error ? error : new Error(String(error || 'Gemini request failed'));
+    normalized.code = 'GEMINI_NETWORK';
+    return normalized;
+  }
+
+  finalizeApiError(lastError, fallbackMessage = 'Gemini extraction failed.') {
+    if (!lastError) return new Error(fallbackMessage);
+    const messages = {
+      GEMINI_SERVICE_BUSY: 'Gemini is temporarily busy after trying the available models. Your API key was not rejected. Please retry in a few minutes.',
+      GEMINI_QUOTA: 'All available Gemini API keys have reached their current quota or rate limit. Please wait for the quota window to reset, or add another key.',
+      GEMINI_AUTH: 'Gemini rejected the API key. Open Settings and verify or replace the key.',
+      GEMINI_MODEL_UNAVAILABLE: 'None of the configured Gemini models is currently available for this request. Please select another supported model and retry.',
+      GEMINI_BAD_REQUEST: `Gemini could not accept this request: ${lastError.message}`,
+      GEMINI_NETWORK: 'The Gemini request timed out or the network connection failed. Please check the connection and retry.'
+    };
+    const finalError = new Error(messages[lastError.code] || lastError.message || fallbackMessage);
+    finalError.code = lastError.code || 'GEMINI_REQUEST_FAILED';
+    finalError.cause = lastError;
+    return finalError;
+  }
+
   async fileToBase64(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -477,12 +532,17 @@ class GeminiHandler {
     return `You are an expert academic examination parser and question digitizer.
 Analyze the attached Question Paper content carefully ${pageRangeDesc ? `(${pageRangeDesc})` : ''}.
 
+Adjacent pages may overlap other batches. Join continuations only when visible on supplied pages. Preserve shared passages in section description. Flag incomplete boundary questions for review; never guess missing content.
+
 EXTRACT EVERY SINGLE QUESTION AND ITS OPTIONS with extreme fidelity:
 1. Identify all questions sequentially (e.g. Question 1, 2, 3... up to the last question on these pages).
 2. For each question, extract:
    - "questionNumber": exact printed question number or label (e.g. "1", "16", "21"). Never renumber.
    - "sourcePage": printed page number where the question appears (e.g. 1, 5, 23).
    - "questionText": complete question stem. If it has mathematical formulas or equations, render them in standard LaTeX math syntax with single dollar signs like $E = mc^2$, $\\frac{a}{b}$, $2.5\\overline{7}$, or $\\sqrt[3]{x}$. If it contains a diagram or table, provide a faithful text representation.
+   - "expectedOptionCount": number of choices printed for this question; omit if uncertain.
+   - "needsReview": true if wording, options, or continuation cannot be read completely.
+   - "reviewReason": explain any unreadable or incomplete source content.
    - "options": list of multiple choice options. Each option must have:
        "key": standard identifier like "1", "2", "3", "4" or "A", "B", "C", "D"
        "text": authentic printed option text
@@ -810,7 +870,7 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
     if (!rawText || typeof rawText !== 'string') return [rawText || ''];
 
     // STRATEGY 1: Split by page markers (--- [Page X] ---)
-    // 1 page per batch guarantees 100% extraction coverage without skipping complex/dense pages
+    // Include neighboring pages so boundary questions and passages have context
     const pageMarkerRegex = /(?:^|\n)(?=---\s*\[?Page\s*\d+\]?\s*---)/i;
     const rawPageBlocks = rawText.split(pageMarkerRegex).map(b => b.trim()).filter(Boolean);
 
@@ -819,7 +879,7 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
       const validBlocks = rawPageBlocks.filter(b => !this.isAnswerKeyPage(b));
       const batches = [];
       for (let i = 0; i < validBlocks.length; i += pagesPerBatch) {
-        const chunk = validBlocks.slice(i, i + pagesPerBatch).join('\n\n').trim();
+        const chunk = validBlocks.slice(Math.max(0, i - 1), i + pagesPerBatch + 1).join('\n\n').trim();
         if (chunk.length > 0) {
           batches.push(chunk);
         }
@@ -991,10 +1051,13 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
 
     // 2. Process Scanned Pages with Gemini Multimodal Vision (e.g. Questions 126 to 200)
     // Group scanned pages into batches of 3 pages for high throughput and precision
+    const allowedPages = new Set(options.pageRange === 'custom' && options.customRange
+      ? this.parsePageRangeString(options.customRange, pdfResult.numPages)
+      : Array.from({ length: pdfResult.numPages }, (_, i) => i + 1));
     const pagesPerBatch = 3;
     const visualBatches = [];
     for (let i = 0; i < scannedPages.length; i += pagesPerBatch) {
-      visualBatches.push(scannedPages.slice(i, i + pagesPerBatch));
+      visualBatches.push(Array.from(new Set(scannedPages.slice(i, i + pagesPerBatch).flatMap(p => [p - 1, p, p + 1]))).filter(p => allowedPages.has(p)).sort((a, b) => a - b));
     }
     const totalVisualBatches = visualBatches.length;
 
@@ -1113,10 +1176,9 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
           attemptedKeyIds.length = 0;
           continue;
         } else {
-          throw new Error(
-            lastError ? `Gemini API authentication failed: ${lastError.message}. Please verify your API keys in Settings.` :
-            'No active API keys available. Please check API Key Settings.'
-          );
+          throw lastError
+            ? this.finalizeApiError(lastError, `Batch ${batchNum} extraction failed.`)
+            : new Error('No active API keys available. Please check API Key Settings.');
         }
       }
 
@@ -1159,20 +1221,20 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
             if (response.status === 429 || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('resource_exhausted')) {
               this.keyManager.recordRateLimit(currentKey.id, 60000, errMsg);
               if (onProgress) onProgress(`Key [${currentKey.label}] rate limited. Switching key...`, 45, { rateLimit: true, keyLabel: currentKey.label });
-              lastError = new Error(`Key [${currentKey.label}] quota exceeded: ${errMsg}`);
+              lastError = this.createApiError(response.status, errMsg, `Key [${currentKey.label}]`);
               break;
             }
             if (response.status === 404 || errMsg.toLowerCase().includes('no longer available') || errMsg.toLowerCase().includes('not found') || errMsg.toLowerCase().includes('deprecated')) {
               console.warn(`[Gemini Extractor] Model [${model}] unavailable: ${errMsg}. Trying next model...`);
-              lastError = new Error(`Model ${model} unavailable: ${errMsg}`);
+              lastError = this.createApiError(response.status, errMsg, `Model ${model}`);
               continue;
             }
             if (response.status === 400 || response.status === 401 || response.status === 403) {
               this.keyManager.recordError(currentKey.id, errMsg);
-              lastError = new Error(`Key [${currentKey.label}] auth error (${response.status}): ${errMsg}`);
+              lastError = this.createApiError(response.status, errMsg, `Key [${currentKey.label}]`);
               break;
             }
-            lastError = new Error(errMsg);
+            lastError = this.createApiError(response.status, errMsg, `Model ${model}`);
             continue;
           }
 
@@ -1193,12 +1255,12 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
           return parsedJSON;
 
         } catch (err) {
-          lastError = err;
+          lastError = this.normalizeThrownError(err);
         }
       }
     }
 
-    throw lastError || new Error(`Batch ${batchNum} extraction failed.`);
+    throw this.finalizeApiError(lastError, `Batch ${batchNum} extraction failed.`);
   }
 
   /**
@@ -1363,7 +1425,7 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i];
       const qNum = String(q.questionNumber || '').trim();
-      const reasons = [];
+      const reasons = q.reviewReason ? [q.reviewReason] : [];
 
       // 1. Placeholder question stem detection
       const stem = String(q.questionText || '').trim();
@@ -1377,13 +1439,14 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
 
       // 2. Options completeness for MCQ
       if (q.type === 'mcq') {
-        if (!Array.isArray(q.options) || q.options.length < 2) {
-          reasons.push(`Incomplete options (found ${q.options?.length || 0}, minimum 2 required)`);
+        const expected = Number(q.expectedOptionCount) || 4;
+        if (!Array.isArray(q.options) || q.options.length !== expected) {
+          reasons.push(`Incomplete options (found ${q.options?.length || 0}, expected ${expected}; verify against source)`);
         } else {
           const hasDummy = q.options.some(o => {
             const t = String(o.text || '').trim();
             const k = String(o.key || '').trim();
-            return !t || t === k || t === `(${k})` || /^option\s*[1-4a-d]?$/i.test(t);
+            return !t || t === `(${k})` || /^option\s*[1-4a-d]?$/i.test(t);
           });
           if (hasDummy) {
             reasons.push('Placeholder option text detected');
@@ -1411,7 +1474,7 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
 
       if (reasons.length > 0) {
         q.needsReview = true;
-        q.reviewReason = reasons.join('; ');
+        q.reviewReason = [...new Set(reasons)].join('; ');
       }
     }
 
@@ -1479,6 +1542,10 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
             options: options,
             correctAnswer: String(q.correctAnswer || '').trim(),
             explanation: String(q.explanation || '').trim(),
+            expectedOptionCount: q.expectedOptionCount,
+            needsReview: !!q.needsReview,
+            reviewReason: q.reviewReason || '',
+            passage: q.passage || sec.description || '',
             isAIExtracted: true
           };
 
@@ -1510,9 +1577,29 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
             const existing = uniqueQuestions[existingIdx];
             const existingOpts = existing.options?.length || 0;
             const candidateOpts = q.options?.length || 0;
-            if (candidateOpts > existingOpts || (candidateOpts === existingOpts && q.questionText.length > existing.questionText.length)) {
-              uniqueQuestions[existingIdx] = q;
+            const normalize = value => String(value || '').replace(/\s+/g, ' ').trim();
+            const sameContent = normalize(existing.questionText) === normalize(q.questionText) &&
+              JSON.stringify(existing.options) === JSON.stringify(q.options) &&
+              existing.correctAnswer === q.correctAnswer;
+            const selected = candidateOpts > existingOpts ||
+              (candidateOpts === existingOpts && q.questionText.length > existing.questionText.length) ? q : existing;
+            selected.passage = [...new Set([existing.passage, q.passage].filter(Boolean))].join('\n\n');
+            if (!sameContent) {
+              selected.needsReview = true;
+              selected.reviewReason = `Conflicting extractions for question ${qNumKey}; compare source pages`;
+              selected.extractionVariants = [...(existing.extractionVariants || [{
+                questionText: existing.questionText, options: existing.options,
+                correctAnswer: existing.correctAnswer, sourcePage: existing.sourcePage
+              }]), {
+                questionText: q.questionText, options: q.options,
+                correctAnswer: q.correctAnswer, sourcePage: q.sourcePage
+              }];
+            } else if (existing.needsReview) {
+              selected.needsReview = true;
+              selected.reviewReason = existing.reviewReason;
+              selected.extractionVariants = existing.extractionVariants;
             }
+            uniqueQuestions[existingIdx] = selected;
           }
           continue;
         }
@@ -1590,7 +1677,7 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
       normalizedSections = [{
         id: 'sec_1',
         title: unifiedTitle,
-        description: `Questions ${qStart} to ${qEnd} (${allQuestions.length} Questions)`,
+        description: [...new Set(allQuestions.map(q => q.passage).filter(Boolean))].join('\n\n'),
         questions: allQuestions,
         totalMarks: calculatedTotalMarks
       }];
@@ -1603,7 +1690,7 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
         return {
           id: `sec_${idx + 1}`,
           title: block.title,
-          description: `Questions ${qStart} to ${qEnd} (${block.questions.length} Questions)`,
+          description: [...new Set(block.questions.map(q => q.passage).filter(Boolean))].join('\n\n'),
           questions: block.questions,
           totalMarks: blockMarks
         };
@@ -1669,10 +1756,9 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
       keyAttemptCount++;
       const keySelection = this.keyManager.getNextKey(attemptedKeyIds);
       if (!keySelection.key) {
-        throw new Error(
-          lastError ? `Gemini API authentication failed: ${lastError.message}. Please verify your API keys in Settings.` :
-          'No active API keys available. Please check API Key Settings.'
-        );
+        throw lastError
+          ? this.finalizeApiError(lastError, 'Image extraction failed.')
+          : new Error('No active API keys available. Please check API Key Settings.');
       }
 
       const currentKey = keySelection.key;
@@ -1717,19 +1803,20 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
             const errMsg = errData.error?.message || `HTTP ${response.status}`;
             if (response.status === 429 || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('resource_exhausted')) {
               this.keyManager.recordRateLimit(currentKey.id, 60000, errMsg);
+              lastError = this.createApiError(response.status, errMsg, `Key [${currentKey.label}]`);
               break;
             }
             if (response.status === 404 || errMsg.toLowerCase().includes('no longer available') || errMsg.toLowerCase().includes('not found') || errMsg.toLowerCase().includes('deprecated')) {
               console.warn(`[Gemini Extractor] Model [${model}] unavailable: ${errMsg}. Trying next model...`);
-              lastError = new Error(`Model ${model} unavailable: ${errMsg}`);
+              lastError = this.createApiError(response.status, errMsg, `Model ${model}`);
               continue;
             }
             if (response.status === 400 || response.status === 401 || response.status === 403) {
               this.keyManager.recordError(currentKey.id, errMsg);
-              lastError = new Error(`Key [${currentKey.label}] auth error (${response.status}): ${errMsg}`);
+              lastError = this.createApiError(response.status, errMsg, `Key [${currentKey.label}]`);
               break;
             }
-            lastError = new Error(errMsg);
+            lastError = this.createApiError(response.status, errMsg, `Model ${model}`);
             continue;
           }
 
@@ -1749,12 +1836,12 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
           return this.standardizeGeminiOutput(parsedJSON, file.name, { modelUsed: model, keyUsed: currentKey.label });
 
         } catch (e) {
-          lastError = e;
+          lastError = this.normalizeThrownError(e);
         }
       }
     }
 
-    throw lastError || new Error('Image extraction failed.');
+    throw this.finalizeApiError(lastError, 'Image extraction failed.');
   }
 
   /**
@@ -1794,10 +1881,9 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
           attemptedKeyIds.length = 0;
           continue;
         } else {
-          throw new Error(
-            lastError ? `Gemini API authentication failed: ${lastError.message}. Please verify your API keys in Settings.` :
-            'No active API keys available. Please check API Key Settings.'
-          );
+          throw lastError
+            ? this.finalizeApiError(lastError, `Visual batch ${batchNum} extraction failed.`)
+            : new Error('No active API keys available. Please check API Key Settings.');
         }
       }
 
@@ -1852,23 +1938,23 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
             if (response.status === 429 || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('resource_exhausted')) {
               this.keyManager.recordRateLimit(currentKey.id, 60000, errMsg);
               if (onProgress) onProgress(`⚡ Key [${currentKey.label}] reached quota limit (429). Switching to next key...`, baseProgress, { rateLimit: true, keyLabel: currentKey.label });
-              lastError = new Error(`Key [${currentKey.label}] quota exceeded: ${errMsg}`);
+              lastError = this.createApiError(response.status, errMsg, `Key [${currentKey.label}]`);
               break;
             }
 
             if (response.status === 404 || errMsg.toLowerCase().includes('no longer available') || errMsg.toLowerCase().includes('not found') || errMsg.toLowerCase().includes('deprecated')) {
               console.warn(`[Gemini Extractor] Model [${model}] unavailable: ${errMsg}. Trying next model...`);
-              lastError = new Error(`Model ${model} unavailable: ${errMsg}`);
+              lastError = this.createApiError(response.status, errMsg, `Model ${model}`);
               continue;
             }
 
             if (response.status === 400 || response.status === 401 || response.status === 403) {
               this.keyManager.recordError(currentKey.id, errMsg);
-              lastError = new Error(`Key [${currentKey.label}] auth error (${response.status}): ${errMsg}`);
+              lastError = this.createApiError(response.status, errMsg, `Key [${currentKey.label}]`);
               break;
             }
 
-            lastError = new Error(errMsg);
+            lastError = this.createApiError(response.status, errMsg, `Model ${model}`);
             continue;
           }
 
@@ -1889,13 +1975,13 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
           return parsedJSON;
 
         } catch (fetchErr) {
-          lastError = fetchErr;
+          lastError = this.normalizeThrownError(fetchErr);
           continue;
         }
       }
     }
 
-    throw lastError || new Error(`Visual batch ${batchNum} extraction failed.`);
+    throw this.finalizeApiError(lastError, `Visual batch ${batchNum} extraction failed.`);
   }
 
   /**
@@ -1934,7 +2020,7 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
       const pagesPerBatch = 2;
       const batches = [];
       for (let i = 0; i < targetPages.length; i += pagesPerBatch) {
-        batches.push(targetPages.slice(i, i + pagesPerBatch));
+        batches.push(targetPages.slice(Math.max(0, i - 1), i + pagesPerBatch + 1));
       }
 
       progress(`⚡ Dividing ${targetPages.length} visual pages into ${batches.length} accelerated batches...`, 15);
@@ -2045,10 +2131,9 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
           attemptedKeyIds.length = 0;
           continue;
         } else {
-          throw new Error(
-            lastError ? `Gemini API authentication failed: ${lastError.message}. Please verify your API keys in Settings.` :
-            'No active API keys available. Please check API Key Settings.'
-          );
+          throw lastError
+            ? this.finalizeApiError(lastError, 'Failed to extract with Gemini.')
+            : new Error('No active API keys available. Please check API Key Settings.');
         }
       }
 
@@ -2090,20 +2175,20 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
             const errMsg = errData.error?.message || `HTTP ${response.status} ${response.statusText}`;
             if (response.status === 429 || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('resource_exhausted')) {
               this.keyManager.recordRateLimit(currentKey.id, 60000, errMsg);
-              lastError = new Error(`Key [${currentKey.label}] quota exceeded: ${errMsg}`);
+              lastError = this.createApiError(response.status, errMsg, `Key [${currentKey.label}]`);
               break;
             }
             if (response.status === 404 || errMsg.toLowerCase().includes('no longer available') || errMsg.toLowerCase().includes('not found') || errMsg.toLowerCase().includes('deprecated')) {
               console.warn(`[Gemini Extractor] Model [${model}] unavailable: ${errMsg}. Trying next model...`);
-              lastError = new Error(`Model ${model} unavailable: ${errMsg}`);
+              lastError = this.createApiError(response.status, errMsg, `Model ${model}`);
               continue;
             }
             if (response.status === 400 || response.status === 401 || response.status === 403) {
               this.keyManager.recordError(currentKey.id, errMsg);
-              lastError = new Error(`Key [${currentKey.label}] auth error (${response.status}): ${errMsg}`);
+              lastError = this.createApiError(response.status, errMsg, `Key [${currentKey.label}]`);
               break;
             }
-            lastError = new Error(errMsg);
+            lastError = this.createApiError(response.status, errMsg, `Model ${model}`);
             continue;
           }
 
@@ -2126,12 +2211,12 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
           return this.standardizeGeminiOutput(parsedJSON, fileName, { modelUsed: model, keyUsed: currentKey.label });
 
         } catch (err) {
-          lastError = err;
+          lastError = this.normalizeThrownError(err);
         }
       }
     }
 
-    throw lastError || new Error('Failed to extract with Gemini.');
+    throw this.finalizeApiError(lastError, 'Failed to extract with Gemini.');
   }
 
   cancel() {
@@ -2203,6 +2288,10 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
           options: options,
           correctAnswer: String(q.correctAnswer || '').trim(),
           explanation: String(q.explanation || '').trim(),
+          expectedOptionCount: q.expectedOptionCount,
+          needsReview: !!q.needsReview,
+          reviewReason: q.reviewReason || '',
+          passage: q.passage || sec.description || '',
           isAIExtracted: true
         };
 
@@ -2260,25 +2349,12 @@ CRITICAL RULES FOR FAITHFUL EXTRACTION:
   /**
    * Sanitizes an extracted question object:
    * 1. Disambiguates statement and match rows mistakenly put into options (moving them to questionText)
-   * 2. Smooths suspicious question numbering jumps (e.g. 199 -> 205 corrected to 200)
+   * 2. Preserves printed numbering so validation can report gaps
    */
   sanitizeAIExtractedQuestion(q, prevQ = null) {
     if (!q) return q;
 
-    // 1. Question numbering sequential smoothing
-    if (prevQ && prevQ.questionNumber) {
-      const prevNum = parseInt(prevQ.questionNumber, 10);
-      const currNum = parseInt(q.questionNumber, 10);
-      if (!isNaN(prevNum) && !isNaN(currNum) && currNum > prevNum + 1 && currNum <= prevNum + 6) {
-        const matchStemNum = (q.questionText || '').match(/^\s*(\d+)[\.\)]/);
-        if (matchStemNum && parseInt(matchStemNum[1], 10) === prevNum + 1) {
-          q.questionNumber = String(prevNum + 1);
-        } else if (currNum === 205 && prevNum === 199) {
-          // Explicit fix for OCR misreading 200 through watermark as 205
-          q.questionNumber = "200";
-        }
-      }
-    }
+    // Preserve printed numbers; gaps are reported by validation.
 
     // 2. DUMMY OPTIONS RECOVERY (e.g. Q198 where options were output as [{"key":"1","text":"1"}, ...] while statements were in questionText)
     const isSingleDummyOpt = (opt) => {

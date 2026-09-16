@@ -264,5 +264,55 @@ console.log(`  ✓ sourcePage retained on all questions: Q1=${merged.questions[0
 
 console.log('\n================================================================');
 console.log('🎉 ALL 6 REGRESSION TEST SUITES PASSED FLAWLESSLY!');
-console.log('   All 10 user requirements verified with 0 errors.');
+console.log('   Local regression checks passed; live PDF transcription is not tested here.');
 console.log('================================================================');
+
+// Regression coverage for merge failures found during review.
+const makeQ = (n, stem, texts = ['red', 'blue', 'green', 'yellow']) => ({
+  questionNumber: String(n), type: 'mcq', questionText: stem,
+  options: texts.map((text, i) => ({ key: String(i + 1), text }))
+});
+const numbered = geminiHandler.mergeBatches([{ questions: [makeQ(199, 'First question'), makeQ(205, 'Next printed question')] }], 'paper.pdf');
+assert.deepStrictEqual(numbered.questions.map(q => q.questionNumber), ['199', '205']);
+assert.ok(numbered.stats.gaps.length);
+const passage = 'Read this shared passage before answering.';
+const withPassage = geminiHandler.mergeBatches([{ sections: [{ title: 'English', description: passage, questions: [makeQ(21, 'What did the author say?')] }] }], 'paper.pdf');
+assert.ok(withPassage.sections[0].description.includes(passage));
+assert.strictEqual(withPassage.questions[0].passage, passage);
+const conflict = geminiHandler.mergeBatches([{ questions: [makeQ(16, 'Original wording')] }, { questions: [makeQ(16, 'Different longer invented wording')] }], 'paper.pdf');
+assert.strictEqual(conflict.questions.length, 1);
+assert.strictEqual(conflict.questions[0].needsReview, true);
+assert.strictEqual(conflict.questions[0].extractionVariants.length, 2);
+assert.strictEqual(conflict.stats.reviewCount, 1);
+const exact = geminiHandler.mergeBatches([{ questions: [makeQ(1, 'Same question')] }, { questions: [makeQ(1, 'Same question')] }], 'paper.pdf');
+assert.strictEqual(exact.questions.length, 1);
+assert.strictEqual(exact.stats.reviewCount, 0);
+const incomplete = [makeQ(1, 'Missing two options', ['red', 'blue'])];
+geminiHandler.validateAndFlagQuestions(incomplete);
+assert.strictEqual(incomplete[0].needsReview, true);
+const binary = [{ ...makeQ(1, 'Choose yes or no', ['yes', 'no']), expectedOptionCount: 2 }];
+geminiHandler.validateAndFlagQuestions(binary);
+assert.ok(!binary[0].needsReview);
+const numeric = [makeQ(1, 'How many?', ['1', '2', '3', '4'])];
+geminiHandler.validateAndFlagQuestions(numeric);
+assert.ok(!numeric[0].needsReview);
+const pages = [1, 2, 3].map(n => `--- [Page ${n}] ---\nPage ${n} question content`).join('\n');
+const overlapping = geminiHandler.splitTextIntoBatches(pages);
+assert.ok(overlapping[0].includes('[Page 2]'));
+assert.ok(overlapping[1].includes('[Page 1]') && overlapping[1].includes('[Page 3]'));
+console.log('Merge and continuation regression checks passed.');
+
+// Gemini API failures must keep their real category instead of becoming auth failures.
+const busyError = geminiHandler.createApiError(503, 'This model is currently experiencing high demand.');
+assert.strictEqual(busyError.code, 'GEMINI_SERVICE_BUSY');
+const finalBusyError = geminiHandler.finalizeApiError(busyError);
+assert.strictEqual(finalBusyError.code, 'GEMINI_SERVICE_BUSY');
+assert.ok(finalBusyError.message.includes('temporarily busy'));
+assert.ok(finalBusyError.message.includes('API key was not rejected'));
+const authError = geminiHandler.createApiError(401, 'API key not valid');
+assert.strictEqual(authError.code, 'GEMINI_AUTH');
+const quotaError = geminiHandler.createApiError(429, 'RESOURCE_EXHAUSTED');
+assert.strictEqual(quotaError.code, 'GEMINI_QUOTA');
+const badRequestError = geminiHandler.createApiError(400, 'Invalid JSON payload');
+assert.strictEqual(badRequestError.code, 'GEMINI_BAD_REQUEST');
+console.log('Gemini error classification regression checks passed.');

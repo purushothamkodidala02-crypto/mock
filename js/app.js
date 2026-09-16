@@ -610,6 +610,28 @@ class AppController {
     }
   }
 
+  handleGeminiExtractionError(error, allowLocalFallback = true) {
+    const code = error?.code || 'GEMINI_REQUEST_FAILED';
+    const message = error?.message || String(error || 'Gemini extraction failed.');
+    const retryable = code === 'GEMINI_SERVICE_BUSY' || code === 'GEMINI_NETWORK';
+
+    if (retryable) {
+      alert(`Gemini extraction paused: ${message}\n\nYour document remains selected. Click Extract again to retry.`);
+      return;
+    }
+
+    if (code === 'GEMINI_AUTH' || code === 'GEMINI_QUOTA' || code === 'GEMINI_MODEL_UNAVAILABLE') {
+      alert(`Gemini extraction stopped: ${message}`);
+      return;
+    }
+
+    if (allowLocalFallback && confirm(
+      `Gemini extraction notice: ${message}\n\nThe Local Free Engine may be less accurate for bilingual, mathematical, or complex PDF layouts. Continue with it?`
+    )) {
+      this.startLocalExtraction();
+    }
+  }
+
   async startGeminiExtraction() {
     if (!this.selectedFile) {
       alert('Please select or upload a document first.');
@@ -656,9 +678,7 @@ class AppController {
     } catch (err) {
       console.error(err);
       this.hideProgress();
-      if (confirm(`Gemini extraction notice: ${err.message || err}\n\nWould you like to instantly parse this document with the Local Free Engine instead?`)) {
-        this.startLocalExtraction();
-      }
+      this.handleGeminiExtractionError(err, true);
     }
   }
 
@@ -694,8 +714,10 @@ class AppController {
         this.renderExtractedPaper(aiResult);
         return;
       } catch (aiErr) {
-        console.warn("Gemini AI error, falling back seamlessly to Local Engine:", aiErr);
-        this.showProgress('Gemini extraction unavailable. Instantly extracting with Local Free Engine...', 25);
+        console.warn('Gemini AI extraction stopped:', aiErr);
+        this.hideProgress();
+        this.handleGeminiExtractionError(aiErr, false);
+        return;
       }
     }
 
@@ -1089,6 +1111,12 @@ class AppController {
       ${q.explanation ? `<div class="text-xs bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-slate-600"><strong>Note / Solution:</strong> ${q.explanation}</div>` : ''}
     `;
 
+    if (q.needsReview) {
+      const notice = document.createElement('div');
+      notice.className = 'text-sm bg-amber-50 text-amber-800 p-3 rounded-lg border border-amber-200';
+      notice.textContent = `Needs review: ${q.reviewReason || 'Compare this question with the source document.'}`;
+      card.prepend(notice);
+    }
     return card;
   }
 
